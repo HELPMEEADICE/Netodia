@@ -42,6 +42,7 @@ use crate::ui::view_ctx::ViewCtx;
 use netodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use netodia_core::entities::cloud::MusicLibraryCategory;
 use netodia_core::entities::playlist::PlaylistStats;
+use netodia_core::entities::track::{TrackListRow as RsTrackListRow, TrackSummary};
 use netodia_ui::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
     Playlists, TrackListRow as UiTrackListRow,
@@ -61,15 +62,14 @@ pub use grid::fetch_grid;
 
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
 // here, one notch wider than that.
-pub(super) use detail::{
-    apply_optimistic_reorder, open_playlist, refresh_detail, rollback_reorder,
-};
-pub(super) use grid::{fetch_grid_stats, rebuild_grid};
-
 /// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
 /// needs the `Rc<NotificationsUi>` for its completion toasts and that is created after the
 /// per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
 pub use callbacks::wire_files;
+pub(super) use detail::{
+    apply_optimistic_reorder, open_playlist, refresh_detail, rollback_reorder,
+};
+pub(super) use grid::{fetch_grid_stats, rebuild_grid};
 
 /// Install the Playlists grid + detail models, build the handle, and wire every
 /// `Playlists.*` / `PlaylistDetail.*` callback to it, bar the ones [`wire_files`] holds.
@@ -259,6 +259,33 @@ fn install_models(ui: &AppWindow) {
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<PlaylistDetail>().set_selected_ids(ModelRc::from(sel));
+}
+
+/// A detail row as the engine's queue entry. The rows the detail already holds *are* the
+/// `song/detail` response — title through artwork — so a click that seats the queue from them
+/// costs one stream ticket instead of a round trip for a list the screen is showing.
+pub(super) fn track_summaries(rows: &[RsTrackListRow]) -> Vec<TrackSummary> {
+    rows.iter()
+        .map(|row| TrackSummary {
+            id: row.id,
+            file_path: String::new(),
+            file_name: row.file_name.clone(),
+            title: row.title.clone(),
+            artist: row.artist.clone(),
+            album: row.album.clone(),
+            duration_ms: row.duration_ms,
+            artwork_path: row.artwork_path.clone(),
+            track_number: row.track_number,
+            disc_number: row.disc_number,
+            last_position: 0,
+            is_favorite: row.is_favorite,
+            rating: row.rating,
+            replaygain_track_gain: None,
+            replaygain_track_peak: None,
+            replaygain_album_gain: None,
+            replaygain_album_peak: None,
+        })
+        .collect()
 }
 
 /// Convert a `PlaylistStats` into the Slint `PlaylistRow` an `EntityCard`

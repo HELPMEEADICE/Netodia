@@ -2797,3 +2797,7 @@ msgstr "右"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "更改系统托盘图标需要重启 Netodia。现在重启？"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "顺序"

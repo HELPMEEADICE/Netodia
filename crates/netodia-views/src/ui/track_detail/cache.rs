@@ -53,6 +53,12 @@ impl DetailCache {
         self.tracks.lock().iter().map(|r| r.id).collect()
     }
 
+    /// The displayed rows themselves, cloned — what [`Self::track_ids`] answers for a caller that
+    /// needs more than the ids, such as a queue seated from rows the screen already holds.
+    pub fn displayed_rows(&self) -> Vec<RsTrackListRow> {
+        self.tracks.lock().clone()
+    }
+
     /// Keep cloud favorite flags in both cache tiers so a later sort cannot restore old hearts.
     pub fn refresh_favorite_flags(&self, liked: impl Fn(i64) -> Option<bool>) {
         for rows in [&self.all_tracks, &self.tracks] {

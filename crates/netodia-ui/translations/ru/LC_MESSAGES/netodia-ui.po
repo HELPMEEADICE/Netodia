@@ -2833,3 +2833,7 @@ msgstr "Справа"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "Чтобы изменить значок в системном трее, нужно перезапустить Netodia. Перезапустить сейчас?"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "По порядку"

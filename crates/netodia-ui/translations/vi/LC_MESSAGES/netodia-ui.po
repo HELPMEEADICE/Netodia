@@ -2797,3 +2797,7 @@ msgstr "Phải"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "Thay đổi biểu tượng khay hệ thống cần khởi động lại Netodia. Khởi động lại ngay?"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "Theo thứ tự"

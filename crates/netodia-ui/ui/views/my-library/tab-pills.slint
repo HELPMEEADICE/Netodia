@@ -4,6 +4,7 @@ import { AlbumDetail, Albums } from "../../globals/albums.slint";
 import { ArtistDetail, Artists } from "../../globals/artists.slint";
 import { GenreDetail, Genres } from "../../globals/genres.slint";
 import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
+import { Player } from "../../globals/player.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
 import { MenuItem } from "../../components/context-menu.slint";
@@ -135,10 +136,34 @@ export component MyLibraryTabPills inherits Rectangle {
         }
 
         if root.playlist-open: ActionPill {
+            // The one button that always answers: pause/resume while this playlist is the source,
+            // and otherwise the way in. `Player.vm.is-playing` is the transport's own state, so the
+            // glyph can't disagree with the bar at the foot of the window.
             PillButton {
-                icon: "shuffle";
-                text: @tr("Shuffle");
-                clicked => { PlaylistDetail.shuffle-all(); }
+                icon: Player.vm.is-playing ? "pause" : "play_arrow";
+                text: Player.vm.is-playing ? @tr("Pause") : @tr("Play");
+                clicked => { PlaylistDetail.toggle-playback(); }
+            }
+            PillDivider { }
+            // How the queue is filled, as one control: the pill carries the current mode and the
+            // menu is where it changes. Two pills spent a slot each on a choice that is one value
+            // at a time, and the row had stopped fitting its own actions.
+            PillOverflowMenu {
+                menu-id: "playlist-play-mode";
+                icon: PlaylistDetail.play-mode == "shuffle" ? "shuffle" : "playlist_play";
+                label: PlaylistDetail.play-mode == "shuffle" ? @tr("Shuffle") : @tr("In order");
+                MenuItem {
+                    label: @tr("In order");
+                    icon: "playlist_play";
+                    checked: PlaylistDetail.play-mode == "ordered";
+                    clicked => { PlaylistDetail.play-all(); }
+                }
+                MenuItem {
+                    label: @tr("Shuffle");
+                    icon: "shuffle";
+                    checked: PlaylistDetail.play-mode == "shuffle";
+                    clicked => { PlaylistDetail.shuffle-all(); }
+                }
             }
             if !PlaylistDetail.cloud-collection: PillDivider { }
             // Rust-side because the picker needs the playlist's track artworks first. It

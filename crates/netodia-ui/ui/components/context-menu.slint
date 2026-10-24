@@ -61,6 +61,9 @@ export component MenuItem inherits Rectangle {
     in property <bool> submenu;
     in property <bool> submenu-open;
     in property <bool> submenu-left;
+    // Marks the entry a select-style menu is currently set to. Off everywhere else, so every other
+    // menu keeps its rows exactly as they were.
+    in property <bool> checked;
 
     callback clicked();
 
@@ -93,6 +96,23 @@ export component MenuItem inherits Rectangle {
                 color: root.destructive ? Theme.red : Theme.text;
                 font-size: Theme.font-size-md;
                 overflow: elide;
+            }
+        }
+
+        // **A fixed box round the check**: a select-style menu marks the entry it is set to, and
+        // the box keeps a ticked row's label from shifting when the value changes.
+        if root.checked: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                MaterialIcon {
+                    x: 0px;
+                    y: 0px;
+                    name: "check";
+                    icon-size: 16px;
+                    icon-color: Theme.accent;
+                }
             }
         }
 

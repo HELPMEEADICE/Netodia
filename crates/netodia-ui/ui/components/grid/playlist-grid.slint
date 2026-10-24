@@ -16,6 +16,11 @@ export component PlaylistGrid inherits Rectangle {
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
     in property <bool> editable: true;
+    // Where this grid was scrolled to last time it was mounted, held by the host because the
+    // detail unmounts it. Restored once the list has a content height to clamp against — a write
+    // before that is dropped and then read back as zero.
+    in-out property <length> scroll-offset: 0;
+    property <bool> restored: false;
 
     callback open-playlist(string /*NetEase playlist_id*/);
     // Fired by the card's hover-revealed icons **and** by its right-click menu; the view routes
@@ -44,6 +49,24 @@ export component PlaylistGrid inherits Rectangle {
         // A card click and a drag-pan are one gesture, and the default is the style's to pick;
         // argument on the entity-card grids.
         mouse-drag-pan-enabled: false;
+
+        // The remount's scroll restore, taken on the first content height this instance reports:
+        // before that the list clamps `viewport-y` against a page it hasn't measured, and the
+        // write would be lost. `restored` then gates the write-back below, so that clamped zero
+        // can never overwrite the offset the host holds for the next mount.
+        changed viewport-height => {
+            if (!root.restored) {
+                self.viewport-y = -root.scroll-offset;
+                root.restored = true;
+            }
+        }
+        // The wheel, a touchpad pan and the overlay bar all move `viewport-y` and none of them
+        // says so; this is the one place the three become one number.
+        changed viewport-y => {
+            if (root.restored) {
+                root.scroll-offset = -self.viewport-y;
+            }
+        }
 
         for grid-row in root.rows: Rectangle {
             min-height: root.row-height;

@@ -27,6 +27,10 @@ export global Playlists {
     in-out property <string> filter;
     in-out property <string> sort-field: "updated"; // "name" | "track_count" | "updated"
     in-out property <string> sort-dir: "desc";
+    // The grid's scroll position. It lives here because the detail **unmounts** the grid branch:
+    // the `ListView` loses `viewport-y` with its instance, so backing out of a playlist landed on
+    // the first row again however far down the user had scrolled.
+    in-out property <length> scroll-offset: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -162,6 +166,14 @@ export global PlaylistDetail {
 
     callback close-detail();
     callback shuffle-all();
+    // The list in its own order, from the first row.
+    callback play-all();
+    // Toggles the transport when one of these rows is the current track, and otherwise starts the
+    // list the way `play-mode` says.
+    callback toggle-playback();
+    // `"ordered"` or `"shuffle"` — which pill the row highlights, and how `toggle-playback` fills
+    // the queue when it has to start one. Rust writes it on Play All / Shuffle All.
+    in-out property <string> play-mode: "ordered";
     callback play-row(int /*track_id*/, int /*index*/);
     // Cloud rows carry exact 64-bit NetEase IDs as decimal strings.
     callback play-cloud-row(string /*song_id*/, int /*index*/);

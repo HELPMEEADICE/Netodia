@@ -2833,3 +2833,7 @@ msgstr "Po prawej"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "Zmiana ikony w zasobniku systemowym wymaga ponownego uruchomienia Melodii. Uruchomić ponownie teraz?"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "Po kolei"

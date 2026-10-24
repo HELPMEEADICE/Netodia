@@ -16,6 +16,11 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 export component PillOverflowMenu inherits Rectangle {
     in property <string> menu-id;
     in property <string> tooltip-text;
+    // The trigger's own face, for a menu standing in for a value the user is choosing between
+    // rather than for actions hidden behind a glyph. Both defaults keep the three-dot pill every
+    // existing host draws; `label` is empty for the same reason `PillButton.icon-only` reads it.
+    in property <string> label;
+    in property <string> icon: "more_vert";
     // A floor, not the width: past it the widest entry decides. Matches the Now Playing
     // overflow's, so the two read as one control at their narrowest as well as by their glyph.
     in property <length> min-menu-width: 156px;
@@ -38,10 +43,11 @@ export component PillOverflowMenu inherits Rectangle {
     height: 32px;
 
     btn := PillButton {
-        // `more_vert`, the glyph the Now Playing bar's overflow already uses, so the two read as
-        // one control. It is also the one in `scripts/icons.txt`; `more_horiz` is not subsetted
-        // into the shipped face and renders as tofu.
-        icon: "more_vert";
+        // `more_vert` by default, the glyph the Now Playing bar's overflow already uses, so the
+        // two read as one control. It is also the one in `scripts/icons.txt`; `more_horiz` is not
+        // subsetted into the shipped face and renders as tofu.
+        icon: root.icon;
+        text: root.label;
         tooltip-text: root.tooltip-text;
         tooltip-overlay: root.tooltip-overlay;
         force-bg: root.holds-highlight;

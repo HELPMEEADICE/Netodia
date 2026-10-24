@@ -53,6 +53,7 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         editable: false;
+        scroll-offset <=> Playlists.scroll-offset;
         open-playlist(id) => { Playlists.open-playlist(id); }
         delete-playlist(_) => { }
         edit-playlist-artwork(_) => { }

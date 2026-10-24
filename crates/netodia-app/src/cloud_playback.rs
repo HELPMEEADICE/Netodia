@@ -334,6 +334,40 @@ impl CloudPlayback {
                 Arc::new(track_summary(song, None, liked))
             })
             .collect();
+        self.start_cloud_queue(generation, tracks, selected_song_id, shuffle, volume, speed).await
+    }
+
+    /// [`Self::play_queue`] for a caller that already holds the track list. The playlist detail
+    /// does — its rows are the same songs, title through artwork — so a click there costs a stream
+    /// ticket instead of a whole `song/detail` round trip for a list the screen is showing.
+    pub async fn play_queue_tracks(
+        &self,
+        tracks: Vec<TrackSummary>,
+        selected_song_id: i64,
+        shuffle: bool,
+        volume: f64,
+        speed: f64,
+    ) -> AppResult<CloudPlaybackResult> {
+        if tracks.is_empty() {
+            return Err(AppError::Queue("云端播放列表没有歌曲".to_owned()));
+        }
+        self.queue_generation.fetch_add(1, Ordering::AcqRel);
+        let generation = self.engine.reserve_playback_request();
+        let tracks: Vec<Arc<TrackSummary>> = tracks.into_iter().map(Arc::new).collect();
+        self.start_cloud_queue(generation, tracks, selected_song_id, shuffle, volume, speed).await
+    }
+
+    /// Seat the queue and start `selected_song_id`, walking the candidates a repeat or shuffle
+    /// preference allows until one of them actually starts.
+    async fn start_cloud_queue(
+        &self,
+        generation: u64,
+        tracks: Vec<Arc<TrackSummary>>,
+        selected_song_id: i64,
+        shuffle: bool,
+        volume: f64,
+        speed: f64,
+    ) -> AppResult<CloudPlaybackResult> {
         let start_index = tracks
             .iter()
             .position(|track| track.id == selected_song_id)

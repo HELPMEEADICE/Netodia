@@ -2818,3 +2818,7 @@ msgstr "Δεξιά"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοποιήσεων απαιτεί επανεκκίνηση του Netodia. Επανεκκίνηση τώρα;"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "Σε σειρά"

@@ -2815,3 +2815,7 @@ msgstr "Derecha"
 #: ui/views/settings/window-chrome-section.slint
 msgid "Changing the system tray icon requires restarting Netodia. Restart now?"
 msgstr "Cambiar el icono de la bandeja del sistema requiere reiniciar Netodia. ¿Reiniciar ahora?"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "En orden"
