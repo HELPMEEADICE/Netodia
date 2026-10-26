@@ -28,7 +28,7 @@ License: AGPL-3.0-or-later
 
 Files: vendor/i-slint-renderer-femtovg/*
 Copyright: SixtyFPS GmbH <info@slint.dev>
-License: GPL-3
+License: GPL-3.0
 Comment: Modified to share embedded static font bytes without a heap copy.
  Upstream also offers Slint-specific licence alternatives; this package uses GPL-3.
 
