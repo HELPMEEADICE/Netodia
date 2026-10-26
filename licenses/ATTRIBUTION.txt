@@ -165,7 +165,11 @@ licenses, and an AGPL project takes the GPL arm.
 The UI toolkit. The .slint markup in this repository is compiled against it and
 the generated code is linked into the executable.
 
-Files: none in this repository -- linked from crates.io at build time.
+MODIFIED. The FemtoVG renderer registers embedded static font bytes without
+copying them to the heap. See vendor/i-slint-renderer-femtovg/NETODIA_PATCHES.md.
+
+Files: vendor/i-slint-renderer-femtovg/ (the remaining Slint crates are linked
+from crates.io at build time).
 
 
 Symphonia

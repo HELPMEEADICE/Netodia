@@ -24,6 +24,17 @@ pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 /// take it explicitly (it became configurable via `sqlx.toml`).
 const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 
+/// SQLite's page cache is per connection, not per database. The old 16,000 KiB
+/// allowance could retain almost 80 MiB across the writer and four readers.
+/// Keep the pool's combined page-cache target at 4 MiB; reads also share up to
+/// 8 MiB of file-backed mappings. These are cache targets, not a total-memory cap:
+/// SQLite can exceed them temporarily while a transaction pins dirty pages.
+const WRITE_CACHE_KIB: &str = "-2048";
+const READ_CACHE_KIB: &str = "-1024";
+const READ_CONNECTIONS: u32 = 2;
+const READ_MMAP_BYTES: &str = "8388608";
+const STATEMENT_CACHE_CAPACITY: usize = 32;
+
 /// The fts5 index-compaction command [`DbPool::close`] issues at shutdown.
 /// Named so the test that proves it still runs binds to the same string —
 /// fts5 rejects an unknown command at *step* time, and `close` can only
@@ -227,10 +238,11 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
         .pragma("synchronous", "NORMAL")
-        // Sized for a single-user desktop library rather than a server: the
-        // working set fits, and oversizing only inflates idle resident memory.
-        .pragma("cache_size", "-16000")
-        .pragma("temp_store", "MEMORY");
+        .statement_cache_capacity(STATEMENT_CACHE_CAPACITY)
+        .pragma("cache_size", WRITE_CACHE_KIB)
+        // Let large sorts spill to a temporary file instead of growing an
+        // unbounded in-memory temporary database alongside the page cache.
+        .pragma("temp_store", "FILE");
 
     let write_pool = SqlitePoolOptions::new().max_connections(1).connect_with(write_opts).await?;
 
@@ -288,32 +300,26 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // multiplies per-connection page-cache and statement memory for concurrency
     // this workload never uses. (`.claude/rules/sqlx.md`'s num_cpus advice is
     // for a server profile.)
-    let read_conns = std::thread::available_parallelism()
-        .map_or(4, |n| u32::try_from(n.get()).unwrap_or(u32::MAX))
-        .clamp(2, 4);
-
     let read_opts = SqliteConnectOptions::from_str(&db_url)?
         .journal_mode(SqliteJournalMode::Wal)
         .read_only(true)
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
-        // Modest, because `mmap_size` below keeps cold pages cheaply
-        // file-backed rather than copied into per-connection heap — so a large
-        // cache here is idle overhead multiplied across the pool.
-        .pragma("cache_size", "-16000")
-        .pragma("temp_store", "MEMORY")
-        .pragma("mmap_size", "268435456");
+        .statement_cache_capacity(STATEMENT_CACHE_CAPACITY)
+        .pragma("cache_size", READ_CACHE_KIB)
+        .pragma("temp_store", "FILE")
+        .pragma("mmap_size", READ_MMAP_BYTES);
 
-    // `idle_timeout` reaps the connections the boot prefetch burst opens after a
-    // minute idle rather than sqlx's default ten. `min_connections` stays at
-    // its default — a cold reopen costs nothing at this scale.
+    // Reap connections opened by the boot prefetch after fifteen idle seconds,
+    // rather than sqlx's default ten minutes. `min_connections` stays at its
+    // default — a cold reopen costs nothing at this scale.
     let read_pool = SqlitePoolOptions::new()
-        .max_connections(read_conns)
-        .idle_timeout(Duration::from_mins(1))
+        .max_connections(READ_CONNECTIONS)
+        .idle_timeout(Duration::from_secs(15))
         .connect_with(read_opts)
         .await?;
 
-    log::info!("Database initialized successfully (read pool: {read_conns} connections)");
+    log::info!("Database initialized successfully (read pool: {READ_CONNECTIONS} connections)");
 
     Ok(DbPool { read: read_pool, write: write_pool })
 }

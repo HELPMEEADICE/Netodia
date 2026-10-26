@@ -6,6 +6,30 @@ use netodia_core::error::AppError;
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
 use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};
 
+/// Exercise the real file-backed pools: the in-memory fixture intentionally has
+/// different options and cannot catch an option being applied to only one pool.
+#[tokio::test]
+async fn file_database_uses_bounded_caches_on_both_pools() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let paths = netodia_core::config::Paths::rooted_at(dir.path().to_path_buf());
+    paths.create_dirs()?;
+    let db = super::init_database(&paths).await?;
+
+    let read_cache: (i64,) = sqlx::query_as("PRAGMA cache_size").fetch_one(db.read()).await?;
+    let write_cache: (i64,) = sqlx::query_as("PRAGMA cache_size").fetch_one(db.write()).await?;
+    let read_temp: (i64,) = sqlx::query_as("PRAGMA temp_store").fetch_one(db.read()).await?;
+    let write_temp: (i64,) = sqlx::query_as("PRAGMA temp_store").fetch_one(db.write()).await?;
+    let read_mmap: (i64,) = sqlx::query_as("PRAGMA mmap_size").fetch_one(db.read()).await?;
+
+    assert_eq!(read_cache.0, -1024);
+    assert_eq!(write_cache.0, -2048);
+    assert_eq!(read_temp.0, 1, "large read sorts must be able to spill to disk");
+    assert_eq!(write_temp.0, 1, "large write sorts must be able to spill to disk");
+    assert_eq!(read_mmap.0, 8_388_608);
+    db.close().await;
+    Ok(())
+}
+
 #[test]
 fn max_binds_per_statement_is_999() {
     assert_eq!(MAX_BINDS_PER_STATEMENT, 999);

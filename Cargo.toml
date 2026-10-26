@@ -13,7 +13,7 @@
 # the gate reads.
 resolver = "3"
 members = ["crates/*"]
-exclude = ["winit"]
+exclude = ["winit", "vendor/i-slint-renderer-femtovg"]
 
 # Inherited by every package. Release CI prepares this version from the tag;
 # `build-{rpm,appimage,tarball}.sh` read this table's first `version = `, so it stays first.
@@ -368,6 +368,10 @@ winit = { path = "winit" }
 # In-tree, like `winit`, so the fix travels with the source; delete it if a release
 # carries the error down instead of unwrapping it.
 accesskit_unix = { path = "vendor/accesskit_unix" }
+# Slint 1.16 copies every embedded font into the heap at registration, including
+# the 17 MiB Chinese face. Keep its static bytes shared through fontique's Blob.
+# Remove this patch when the upstream renderer registers static fonts without copying.
+i-slint-renderer-femtovg = { path = "vendor/i-slint-renderer-femtovg" }
 
 [profile.release]
 lto = "fat"

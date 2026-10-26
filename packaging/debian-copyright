@@ -7,8 +7,8 @@ Comment: Netodia's Slint build compiles its fonts and one third-party logo into
  full texts, and a note of what was modified in each, also ship in
  /usr/share/doc/netodia/licenses/.
  .
- The executable also links crates on copyleft rather than permissive terms. None
- of them is in this source tree, so none has a Files stanza. Slint, the UI
+ The executable also links crates on copyleft rather than permissive terms. Slint's
+ patched FemtoVG renderer is in this source tree and has a Files stanza. Slint, the UI
  toolkit, is taken under the GPL-3.0 arm of its own tri-licence, and kakasi,
  which romanizes Japanese, is GPL-3.0 with no other arm. Symphonia's sixteen
  decoder crates and option-ext are MPL-2.0. Policy 12.5 lets both GPL-3 and
@@ -25,6 +25,12 @@ Comment: Netodia's Slint build compiles its fonts and one third-party logo into
 Files: *
 Copyright: 2026 Kenan Salar <kenansalar@users.noreply.github.com>
 License: AGPL-3.0-or-later
+
+Files: vendor/i-slint-renderer-femtovg/*
+Copyright: SixtyFPS GmbH <info@slint.dev>
+License: GPL-3
+Comment: Modified to share embedded static font bytes without a heap copy.
+ Upstream also offers Slint-specific licence alternatives; this package uses GPL-3.
 
 Files: crates/netodia-ui/ui/assets/fonts/vazirmatn/*
 Copyright: 2015 The Vazirmatn Project Authors <https://github.com/rastikerdar/vazirmatn>

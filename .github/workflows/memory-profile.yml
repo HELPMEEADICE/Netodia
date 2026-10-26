@@ -1,10 +1,18 @@
-name: Artwork memory profile
+name: Memory profile
 
 on:
   pull_request:
     branches: [main]
     paths:
       - crates/netodia-artwork/**
+      - crates/netodia-store/**
+      - crates/netodia-ui/**
+      - crates/netodia-views/**
+      - vendor/i-slint-renderer-femtovg/**
+      - Cargo.toml
+      - Cargo.lock
+      - scripts/profile-ui-memory.py
+      - scripts/test_profile_ui_memory.py
       - .github/workflows/memory-profile.yml
   workflow_dispatch:
 
@@ -12,6 +20,82 @@ permissions:
   contents: read
 
 jobs:
+  ui:
+    name: Whole UI memory (${{ matrix.revision }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [baseline, optimized]
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_TERM_COLOR: always
+      BASE_REF: ${{ github.event.pull_request.base.sha || 'main' }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      LP_NUM_THREADS: '2'
+      SLINT_BACKEND: winit-femtovg
+      WINIT_UNIX_BACKEND: x11
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Keep the same probe for both revisions; baseline does not contain it.
+      - name: Save measurement script
+        run: cp scripts/profile-ui-memory.py "$RUNNER_TEMP/profile-ui-memory.py"
+      - name: Check out baseline
+        if: matrix.revision == 'baseline'
+        run: |
+          git fetch --depth=1 origin "$BASE_REF"
+          git checkout --detach FETCH_HEAD
+      - name: Record revision
+        run: git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/linux-system-deps
+        with:
+          extra-packages: xvfb xauth xdotool imagemagick libgl1-mesa-dri mesa-utils
+      - uses: ./.github/actions/headless-audio
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ui-memory-release
+      - name: Build complete release application
+        run: cargo build --release --locked -p netodia
+      - name: Measure visible UI in English and Chinese
+        run: |
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' \
+            python "$RUNNER_TEMP/profile-ui-memory.py" \
+              --binary target/release/Netodia --output "$RUNNER_TEMP/ui-memory"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: ui-memory-${{ matrix.revision }}
+          path: |
+            ${{ runner.temp }}/ui-memory/summary.md
+            ${{ runner.temp }}/ui-memory/results.json
+            ${{ runner.temp }}/ui-memory/bootstrap.log
+            ${{ runner.temp }}/ui-memory/**/samples.csv
+            ${{ runner.temp }}/ui-memory/**/app.log
+            ${{ runner.temp }}/ui-memory/**/window.png
+          if-no-files-found: warn
+          retention-days: 30
+
+  windows-build:
+    name: Windows release binary
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ui-memory-release
+      - name: Build complete release application
+        run: cargo build --release --locked -p netodia
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Netodia-Windows-memory-optimized
+          path: target/release/Netodia.exe
+          if-no-files-found: error
+          retention-days: 30
+
   artwork:
     name: Compare full and scaled artwork decode
     runs-on: ubuntu-latest
