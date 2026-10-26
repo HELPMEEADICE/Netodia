@@ -22,6 +22,31 @@ import zlib
 
 
 TARGET_BYTES = 50_000_000
+SHOW_WINDOW = '    app.show().map_err(|e| AppError::io("show window", e))?;'
+# Applied only to disposable CI checkouts, equally to baseline and candidate.
+# This fork resets persisted local tabs to account playlists at startup, so
+# views.json alone cannot select the local Songs/Albums surfaces for measurement.
+NAVIGATION_HOOK = r'''
+    if let (Ok(view), Ok(ready)) = (
+        std::env::var("NETODIA_MEMORY_PROFILE_VIEW"),
+        std::env::var("NETODIA_MEMORY_PROFILE_READY"),
+    ) {
+        let library = app.global::<netodia_ui::MyLibrary>();
+        let tab = if view == "songs" { library.get_tab_songs() } else { library.get_tab_albums() };
+        library.set_tab_idx(tab);
+        app.global::<netodia_ui::Nav>().set_selected_index(3);
+        let weak = app.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_secs(10), move || {
+            let Some(app) = weak.upgrade() else { return };
+            let count = if view == "songs" {
+                app.global::<netodia_ui::Tracks>().get_total_count()
+            } else {
+                app.global::<netodia_ui::Albums>().get_total_count()
+            };
+            let _ = std::fs::write(ready, count.to_string());
+        });
+    }
+'''
 SCENARIOS = (
     ("empty-search", 0, 0, False),
     ("empty-settings", 9, 0, False),
@@ -96,6 +121,12 @@ def stop(process):
 
 def launch(binary, root, log):
     env = os.environ.copy()
+    views = json.loads((root / "views.json").read_text())
+    if views["last_nav_index"] == 3:
+        env["NETODIA_MEMORY_PROFILE_VIEW"] = (
+            "songs" if views["my_library_tab"] == 1 else "albums"
+        )
+        env["NETODIA_MEMORY_PROFILE_READY"] = str(root.parent / "mounted-count.txt")
     env.update(NETODIA_DATA_DIR=str(root), RUST_LOG="info")
     return subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log)
 
@@ -159,6 +190,12 @@ def measure(binary, root, output, settle, samples):
             wait_visible(process)
             time.sleep(settle)
             check_running(process)
+            views = json.loads((root / "views.json").read_text())
+            if views["last_nav_index"] == 3:
+                expected = 10_000 if views["my_library_tab"] == 1 else 100
+                actual = int((output / "mounted-count.txt").read_text())
+                if actual != expected:
+                    raise RuntimeError(f"Expected {expected} displayed items, got {actual}")
             rows = []
             for index in range(samples):
                 check_running(process)
@@ -179,11 +216,22 @@ def measure(binary, root, output, settle, samples):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--prepare-source", type=Path,
+                        help="add the identical CI-only navigation hook before building either revision")
+    parser.add_argument("--binary", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--settle", type=int, default=20)
     parser.add_argument("--samples", type=int, default=10)
     args = parser.parse_args()
+    if args.prepare_source:
+        source = args.prepare_source.read_text(encoding="utf-8")
+        if source.count(SHOW_WINDOW) != 1:
+            parser.error("expected exactly one window-show anchor in main.rs")
+        args.prepare_source.write_text(source.replace(SHOW_WINDOW, NAVIGATION_HOOK + SHOW_WINDOW),
+                                       encoding="utf-8")
+        return
+    if args.binary is None or args.output is None:
+        parser.error("--binary and --output are required for measurement")
     if args.settle < 5 or args.samples < 2:
         parser.error("allow at least 5 seconds to settle and 2 samples")
     binary = args.binary.resolve(strict=True)
@@ -210,6 +258,9 @@ def main():
         "Real release app, visible 1100×760 window, separate process per scenario; "
         f"{args.settle}s settle and median of {args.samples} one-second samples. "
         "Library fixture: 10,000 synthetic tracks and 100 album covers; no audio playback or cloud account.", "",
+        "Both revisions receive the same CI-only navigation hook to select local tabs that "
+        "this fork overrides on startup. Sampling verifies 10,000 songs or 100 albums loaded. "
+        "The downloadable Windows binary is built from unmodified shipping sources.", "",
         "GitHub's Xvfb uses Mesa software OpenGL. Driver/JIT allocations are included in process "
         "memory; this environment cannot certify a hardware GPU desktop's 50 MB target.", "",
         "Private footprint = anonymous + swap; RSS includes shared and executable pages. "

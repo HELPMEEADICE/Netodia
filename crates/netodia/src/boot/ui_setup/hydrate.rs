@@ -150,6 +150,13 @@ pub fn spawn_initial_tracks_fetch(
     view_state: Option<&services::view_state::ViewStateData>,
     weak: slint::Weak<AppWindow>,
 ) {
+    // A hidden Songs tab needs neither a library-sized row snapshot nor its
+    // prewarmed covers. The section gate consumes this on the first real enter
+    // and requests a refresh using the then-current sort and filter.
+    if !tracks_ui.section_active() {
+        tracks_ui.mark_dirty();
+        return;
+    }
     let (sort_field, sort_dir) =
         ui::callbacks::persisted_sort(view_state, ui::track_list_view::view_id::TRACKS)
             .map_or_else(

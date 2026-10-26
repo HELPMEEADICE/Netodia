@@ -55,6 +55,8 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           shared-key: ui-memory-release
+      - name: Enable the same diagnostic navigation on both revisions
+        run: python "$RUNNER_TEMP/profile-ui-memory.py" --prepare-source crates/netodia/src/main.rs
       - name: Build complete release application
         run: cargo build --release --locked -p netodia
       - name: Measure visible UI in English and Chinese
@@ -71,6 +73,7 @@ jobs:
             ${{ runner.temp }}/ui-memory/results.json
             ${{ runner.temp }}/ui-memory/bootstrap.log
             ${{ runner.temp }}/ui-memory/**/samples.csv
+            ${{ runner.temp }}/ui-memory/**/mounted-count.txt
             ${{ runner.temp }}/ui-memory/**/app.log
             ${{ runner.temp }}/ui-memory/**/window.png
           if-no-files-found: warn

@@ -24,11 +24,11 @@ pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 /// take it explicitly (it became configurable via `sqlx.toml`).
 const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 
-/// SQLite's page cache is per connection, not per database. The old 16,000 KiB
+/// `SQLite`'s page cache is per connection, not per database. The old 16,000 KiB
 /// allowance could retain almost 80 MiB across the writer and four readers.
 /// Keep the pool's combined page-cache target at 4 MiB; reads also share up to
 /// 8 MiB of file-backed mappings. These are cache targets, not a total-memory cap:
-/// SQLite can exceed them temporarily while a transaction pins dirty pages.
+/// `SQLite` can exceed them temporarily while a transaction pins dirty pages.
 const WRITE_CACHE_KIB: &str = "-2048";
 const READ_CACHE_KIB: &str = "-1024";
 const READ_CONNECTIONS: u32 = 2;
