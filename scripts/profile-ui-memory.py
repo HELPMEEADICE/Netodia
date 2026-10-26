@@ -93,7 +93,7 @@ def wait_visible(process, timeout=60):
             capture_output=True, text=True, check=False,
         )
         if found.returncode == 0 and found.stdout.strip():
-            return
+            return found.stdout.splitlines()[0]
         time.sleep(0.25)
     raise RuntimeError("Netodia did not show a window within 60 seconds")
 
@@ -102,7 +102,8 @@ def write_settings(root, locale, nav, tab):
     root.mkdir(parents=True, exist_ok=True)
     (root / "settings.json").write_text(json.dumps({
         "locale": locale, "window_width": 1100, "window_height": 760,
-        "onboarding": {"onboarding_version": 1},
+        # OnboardingFlags is serde(flatten) in SettingsData.
+        "onboarding_version": 1,
     }), encoding="utf-8")
     (root / "views.json").write_text(json.dumps({
         "last_nav_index": nav, "my_library_tab": tab, "settings_tab": 0,
@@ -187,9 +188,19 @@ def measure(binary, root, output, settle, samples):
     with (output / "app.log").open("w") as log:
         process = launch(binary, root, log)
         try:
-            wait_visible(process)
+            window = wait_visible(process)
+            subprocess.run(["xdotool", "windowsize", "--sync", window, "1100", "760"],
+                           check=True, timeout=15)
+            subprocess.run(["xdotool", "windowmove", window, "0", "0"], check=True)
             time.sleep(settle)
             check_running(process)
+            geometry = subprocess.check_output(
+                ["xdotool", "getwindowgeometry", "--shell", window], text=True,
+            )
+            (output / "window-geometry.txt").write_text(geometry)
+            dimensions = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
+            if dimensions.get("WIDTH") != "1100" or dimensions.get("HEIGHT") != "760":
+                raise RuntimeError(f"Window is not the requested full UI size: {geometry}")
             views = json.loads((root / "views.json").read_text())
             if views["last_nav_index"] == 3:
                 expected = 10_000 if views["my_library_tab"] == 1 else 100
