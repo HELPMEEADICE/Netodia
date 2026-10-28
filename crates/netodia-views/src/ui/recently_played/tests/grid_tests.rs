@@ -124,11 +124,96 @@ fn the_queue_ids_follow_the_same_filter_as_the_cards() {
     crate::ui::recently_played::set_filter(&rp_ui, "shoegaze");
     assert_eq!(
         build_filtered_grid(&rp_ui).most_played_count,
-        rp_ui.most_played_track_ids().len(),
+        rp_ui.most_played_cloud_tracks().len(),
         "the cards and the queue they load must agree about what's on screen"
     );
 
     crate::ui::recently_played::set_filter(&rp_ui, "nothing matches this");
     assert_eq!(build_filtered_grid(&rp_ui).most_played_count, 0);
-    assert!(rp_ui.most_played_track_ids().is_empty());
+    assert!(rp_ui.most_played_cloud_tracks().is_empty());
+}
+
+#[test]
+fn every_cloud_card_keeps_its_identity_after_filtering() {
+    let rp_ui = seeded(RecentlyPlayedTab::MostPlayed, 100);
+    let row = |id, title: &str| MostPlayedFavorite { id, title: title.into(), ..most_played(42) };
+    *rp_ui.state().most_played.lock() = vec![
+        row(4_000_000_001, "Keep first"),
+        row(4_000_000_002, "Other"),
+        row(4_000_000_003, "Keep last"),
+    ];
+
+    let all = build_filtered_grid(&rp_ui);
+    assert_eq!(all.most_played_count, 3);
+    assert_eq!(all.most_played.iter().map(|row| row.id).collect::<Vec<_>>(), [1, 2, 3]);
+    crate::ui::recently_played::set_filter(&rp_ui, "keep");
+    let filtered = build_filtered_grid(&rp_ui);
+    assert_eq!(filtered.most_played.iter().map(|row| row.id).collect::<Vec<_>>(), [1, 3]);
+    assert_eq!(
+        filtered.most_played.iter().map(|row| row.remote_id.as_str()).collect::<Vec<_>>(),
+        ["4000000001", "4000000003"]
+    );
+    assert_eq!(
+        rp_ui.most_played_cloud_tracks().iter().map(|track| track.id).collect::<Vec<_>>(),
+        [4_000_000_001, 4_000_000_003]
+    );
+    assert!(rp_ui.most_played_cloud_tracks()[0].file_path.is_empty());
+    assert_eq!(rp_ui.most_played_cloud_tracks()[0].duration_ms, 210_000);
+}
+
+#[test]
+fn changing_accounts_clears_the_ranking_and_rejects_prepared_old_rows() {
+    let rp_ui = seeded(RecentlyPlayedTab::MostPlayed, 100);
+    let old = build_filtered_grid(&rp_ui);
+    rp_ui.take_grid_dirty();
+    *rp_ui.state().last_grid_signature.lock() = Some(123);
+
+    rp_ui.clear_account_tracks();
+
+    assert!(!rp_ui.grid_refresh_is_current(old.refresh_generation));
+    assert!(rp_ui.most_played_cloud_tracks().is_empty());
+    assert_eq!(rp_ui.state().most_played_totals.lock().tracks, 0);
+    assert!(rp_ui.state().last_grid_signature.lock().is_none());
+    assert!(rp_ui.take_grid_dirty());
+}
+
+#[test]
+fn an_older_ranking_request_cannot_replace_a_newer_refresh() {
+    let rp_ui = seeded(RecentlyPlayedTab::MostPlayed, 100);
+    let first = rp_ui.begin_grid_refresh();
+    let second = rp_ui.begin_grid_refresh();
+
+    assert!(!rp_ui.grid_refresh_is_current(first));
+    assert!(rp_ui.grid_refresh_is_current(second));
+}
+
+#[test]
+fn ranking_rows_preserve_cloud_metadata_and_counts() {
+    use netodia_core::entities::cloud::{Album, Artist, PlayedSong, Song};
+    let row = super::fetch::most_played_row(
+        PlayedSong {
+            song: Song {
+                id: 4_000_000_001,
+                name: "Ranked song".into(),
+                artists: vec![Artist { name: "Artist".into(), ..Artist::default() }],
+                album: Album {
+                    name: "Album".into(),
+                    cover_url: Some("https://p1.music.126.net/a.jpg".into()),
+                    ..Album::default()
+                },
+                duration_ms: 210_000,
+                ..Song::default()
+            },
+            play_count: 123,
+        },
+        true,
+    );
+
+    assert_eq!(row.id, 4_000_000_001);
+    assert_eq!(row.play_count, 123);
+    assert_eq!(row.artist.as_deref(), Some("Artist"));
+    assert_eq!(row.album.as_deref(), Some("Album"));
+    assert_eq!(row.artwork_path.as_deref(), Some("https://p1.music.126.net/a.jpg"));
+    assert_eq!(row.duration_ms, 210_000);
+    assert!(row.is_favorite);
 }

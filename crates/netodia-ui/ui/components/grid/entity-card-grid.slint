@@ -27,6 +27,8 @@ export component EntityCardGrid inherits Rectangle {
     in property <string> fallback-icon: "music-note";
     // Reveals the play-count badge where a row carries one; an unplayed row stays bare either way.
     in property <bool> show-play-count: false;
+    // Cloud tracks carry exact string identities; local selection menus require DB ids.
+    in property <bool> cloud-tracks: false;
     // **Three mounts, and they are not all the same kind of thing.** Favorites' Artists tab draws
     // artists; its Most Played tab and Recently Played's draw *tracks*. So the kind and the
     // selection scope are the host's to state rather than this component's to assume.
@@ -45,6 +47,7 @@ export component EntityCardGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
+    callback cloud-row-clicked(string /*song_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -82,7 +85,10 @@ export component EntityCardGrid inherits Rectangle {
                     card-id: entity.id;
                     // The card's own activation, so Play over a single track card means what
                     // clicking it means. Inert on the artist mount, which never takes the arm.
-                    play-single => { root.row-clicked(entity.id); }
+                    play-single => {
+                        if root.cloud-tracks { root.cloud-row-clicked(entity.remote_id); }
+                        else { root.row-clicked(entity.id); }
+                    }
 
                     card := EntityCard {
                         card-width: root.card-width;
@@ -97,13 +103,16 @@ export component EntityCardGrid inherits Rectangle {
                         title: entity.title;
                         subtitle: entity.subtitle;
                         play-count: root.show-play-count ? entity.play_count : 0;
-                        clicked => { root.row-clicked(entity.id); }
+                        clicked => {
+                            if root.cloud-tracks { root.cloud-row-clicked(entity.remote_id); }
+                            else { root.row-clicked(entity.id); }
+                        }
 
-                        selectable: true;
+                        selectable: !root.cloud-tracks;
                         selected: cell.selected;
                         selection-live: cell.selection-live;
                         select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
-                        context-requested(x, y) => { cell.open-menu(x, y); }
+                        context-requested(x, y) => { if !root.cloud-tracks { cell.open-menu(x, y); } }
                     }
 
                 }

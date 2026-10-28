@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 
 use lru::LruCache;
 use netodia_core::entities::cloud::{
-    Account, Album, Artist, DAILY_PLAYLIST_ID, LikedSong, Lyrics, MusicLibraryCategory, Playlist,
-    Quality, RecentSong, RoamingMode, SearchKind, SearchResult, Song, StreamTicket,
+    Account, Album, Artist, DAILY_PLAYLIST_ID, LikedSong, Lyrics, MusicLibraryCategory, PlayedSong,
+    Playlist, Quality, RecentSong, RoamingMode, SearchKind, SearchResult, Song, StreamTicket,
 };
 use netodia_core::error::{AppError, AppResult};
 use netodia_net::netease::{Client, QrStatus as NetEaseQrStatus};
@@ -604,6 +604,13 @@ impl CloudService {
             *self.recent_songs_cache.write() = Some((account.id, generation, songs.clone()));
         }
         Ok(songs)
+    }
+
+    /// The signed-in account's all-time listening ranking, independent of the local library.
+    pub async fn most_played_songs(&self) -> AppResult<Vec<PlayedSong>> {
+        let (account, cancellation) = self.account_snapshot()?;
+        self.account_request_in_generation(self.client.most_played_songs(account.id), cancellation)
+            .await
     }
 
     /// A recent-history snapshot for the visible account. It is only an in-process presentation

@@ -34,8 +34,7 @@ pub(crate) struct RecentlyPlayedUiState {
     /// Active filter needle — cached so the live-refresh subscriber can re-apply it
     /// off the UI thread. Shared by both tabs.
     pub filter: Mutex<Needle>,
-    /// Most Played rows in Rust shape, so click handlers resolve `(id) -> entity`
-    /// without re-fetching and a keystroke or column-count change re-chunks in memory.
+    /// The account's all-time ranking, preserving server order, play counts and full song ids.
     pub most_played: Mutex<Vec<MostPlayedFavorite>>,
     /// What the band's chips state about the two tabs above them, folded on the
     /// worker that produced the rows rather than at publish time — so
@@ -56,8 +55,7 @@ pub(crate) struct RecentlyPlayedUiState {
     pub last_mosaic_paths: MosaicGuard,
     /// Hash of the Most Played grid's last applied contents plus the tab and column
     /// count that shaped them. The same guard one surface down: a grid write is a
-    /// `set_vec` reset that rebuilds every mounted card, and a `stats_changed` tick
-    /// lands on both tabs while only this one ranks by play count. Reset on
+    /// `set_vec` reset that rebuilds every mounted card. Reset on
     /// section-leave, the models being cleared there, so a matching hash would
     /// otherwise skip the refill.
     pub last_grid_signature: Mutex<Option<u64>>,
@@ -78,11 +76,3 @@ impl RecentlyPlayedUiState {
         }
     }
 }
-
-/// How many covers to decode up front when the Most Played tab becomes visible.
-///
-/// A screenful or two, matching `ui::favorites::state::GRID_PREWARM_AHEAD` and not
-/// the tier's capacity. The grid is uncapped, so prewarming everything would decode a
-/// large library's whole played set on every `stats_changed` tick and evict all but
-/// the last capacity's worth before a card asked for one.
-pub(super) const GRID_PREWARM_AHEAD: usize = 24;

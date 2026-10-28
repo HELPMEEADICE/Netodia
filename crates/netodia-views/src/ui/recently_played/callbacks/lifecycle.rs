@@ -1,6 +1,6 @@
 //! Recently-Played section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch), the joined `library_changed` +
-//! `stats_changed` subscriber, and the first-enter initial fetch. See
+//! handler (cache release + re-fetch), account and liked-song updates,
+//! and the first-enter initial fetch. See
 //! [`super::wire`].
 
 use std::sync::Arc;
@@ -46,6 +46,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // re-enter handler's `take_dirty()` never observes stale data.
                 ru.mark_dirty();
                 ru.begin_tracks_refresh();
+                ru.begin_grid_refresh();
+                ru.mark_grid_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
                 // UI-thread teardown: hand back the banner's cover and blur slots so their
@@ -74,6 +76,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_cloud_loading(false);
+                g.set_most_played_loading(false);
+                g.set_most_played_error(slint::SharedString::default());
                 g.set_cloud_error(slint::SharedString::default());
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 clear_vec_model::<UiEntityGridRow>(
@@ -109,29 +113,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 runtime.spawn_blocking(move || ru.release_section_state());
             }
         });
-    }
-
-    // --- local Most Played updates ----------------------------
-    // Songs now comes from NetEase and refreshes on entry. Only the legacy Most Played grid still
-    // depends on local play-count statistics.
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
-        let weak = weak.clone();
-        let mut stats_rx = state.stats_changed.subscribe();
-        let _ = slint::spawn_local(Compat::new(async move {
-            while stats_rx.changed().await.is_ok() {
-                if !ru.section_active() {
-                    ru.mark_dirty();
-                    continue;
-                }
-                if ru.active_tab() == RecentlyPlayedTab::MostPlayed {
-                    recently_played_ui_mod::refresh_grid(&s, &ru, &weak).await;
-                } else {
-                    ru.mark_grid_dirty();
-                }
-            }
-        }));
     }
 
     wire_account_updates(state, rp_ui, &weak);
@@ -170,10 +151,7 @@ fn wire_account_updates(
                 rp_ui.mark_dirty();
                 continue;
             }
-            if let Err(error) = recently_played_ui_mod::refresh_tracks(&state, &rp_ui, &weak).await
-            {
-                log::warn!("recently_played::account_changed: {}", describe(&error));
-            }
+            kick_full_refresh(&state, &rp_ui, &weak).await;
         }
     }));
 }
@@ -191,7 +169,9 @@ fn wire_liked_updates(
     let runtime = state.runtime.clone();
     runtime.spawn(async move {
         while changed.changed().await.is_ok() {
-            if rp_ui.state().tracks_all.lock().is_empty() {
+            if rp_ui.state().tracks_all.lock().is_empty()
+                && rp_ui.state().most_played.lock().is_empty()
+            {
                 continue;
             }
             if let Err(error) =
@@ -212,6 +192,14 @@ fn clear_account_data(rp_ui: &RecentlyPlayedUi, weak: &slint::Weak<AppWindow>) {
         release_hero_slots(&g);
         release_shared_hero(&ui);
         g.set_track_count(UNFETCHED_COUNT);
+        g.set_most_played_count(UNFETCHED_COUNT);
+        g.set_most_played_loading(false);
+        g.set_most_played_error(slint::SharedString::default());
+        clear_vec_model::<UiEntityGridRow>(
+            &g.get_most_played_rows(),
+            "recently_played: clear account ranking",
+        );
+        ui.global::<CardSelection>().invoke_clear();
         g.set_cloud_loading(false);
         g.set_cloud_error(slint::SharedString::default());
         clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear account tracks");
@@ -220,20 +208,15 @@ fn clear_account_data(rp_ui: &RecentlyPlayedUi, weak: &slint::Weak<AppWindow>) {
     });
 }
 
-/// Refresh the `NetEase` history whenever this page is entered, including when the Most Played tab
-/// is mounted because the shared hero still summarizes the history. Refresh the local Most Played
-/// grid only while that tab is visible; when both are needed they run concurrently.
-///
-/// `get_most_played` remains uncapped because the virtualized grid lets the user scroll the full
-/// local set. The stats subscriber refreshes it while that tab is mounted and marks it dirty while
-/// Songs is visible, so switching tabs fetches the newest local statistics.
+/// Refresh account history on entry for the shared hero, and fetch the listening ranking only
+/// when its tab is mounted. Local library statistics have no bearing on either cloud snapshot.
 async fn kick_full_refresh(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
     if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
-        // This fetch settles the dirty flag for the local grid and refreshes cloud history for the
+        // This fetch settles the dirty flag for the ranking and refreshes cloud history for the
         // shared hero without mounting the Songs list.
         rp_ui.take_grid_dirty();
         let (_grid, history) = tokio::join!(

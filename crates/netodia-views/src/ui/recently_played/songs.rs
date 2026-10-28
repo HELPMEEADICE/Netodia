@@ -157,7 +157,7 @@ pub fn restore_cached_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
 /// row is mounted.
 pub async fn refresh_liked_flags(
     state: &AppState,
-    rp_ui: &RecentlyPlayedUi,
+    rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
 ) -> AppResult<()> {
     let account_generation = state.cloud.status().generation;
@@ -166,6 +166,13 @@ pub async fn refresh_liked_flags(
         return Ok(());
     }
     let changes = {
+        let _gate = rp_ui.gate();
+        if state.cloud.status().generation != account_generation {
+            return Ok(());
+        }
+        for row in rp_ui.state().most_played.lock().iter_mut() {
+            row.is_favorite = liked.contains(&row.id);
+        }
         let mut rows = rp_ui.state().tracks_all.lock();
         rows.iter_mut()
             .map(|row| {
@@ -178,6 +185,8 @@ pub async fn refresh_liked_flags(
         for (id, is_favorite) in changes {
             apply_row_favorite(weak, id, is_favorite);
         }
+    } else if rp_ui.section_active() {
+        super::grid::apply_filtered_grid(rp_ui, weak);
     }
     Ok(())
 }

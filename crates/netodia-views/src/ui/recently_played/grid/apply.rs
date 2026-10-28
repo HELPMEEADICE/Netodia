@@ -19,6 +19,7 @@ use netodia_ui::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 /// The Most Played tab's filtered rows, prepared away from the UI thread by
 /// [`build_filtered_grid`] and consumed by [`write_filtered_grid`].
 pub(super) struct PreparedGrid {
+    pub(super) refresh_generation: u64,
     /// Which tab these rows were built for. Carried rather than re-derived because
     /// [`build_filtered_grid`] may run on a worker and [`write_filtered_grid`] always runs on the
     /// UI thread, so a pick can land in the gap.
@@ -39,14 +40,16 @@ pub(super) struct PreparedGrid {
 /// can read.
 ///
 /// **Nothing is walked on the Songs tab**, the mounted-tab-only rule
-/// `songs::build_filtered_tracks` holds from the other side. The walk is far from free: the query
-/// behind this cache is uncapped and library-wide, and [`apply_filtered_grid_now`] calls this **on
-/// the UI thread**. The bail is safe because [`mounted_content`] already collapses the Songs arm
+/// `songs::build_filtered_tracks` holds from the other side. [`apply_filtered_grid_now`] calls
+/// this on the UI thread; an unmounted tab has no reason to build strings there. The bail is safe
+/// because [`mounted_content`] already collapses the Songs arm
 /// to a constant `0`, and the tab pick rebuilds the count before the grid it gates can mount.
 pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
+    let refresh_generation = rp_ui.grid_refresh_generation();
     let tab = rp_ui.active_tab();
     if tab != RecentlyPlayedTab::MostPlayed {
         return PreparedGrid {
+            refresh_generation,
             tab,
             most_played: Vec::new(),
             most_played_count: 0,
@@ -57,7 +60,7 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
     let needle = rp_ui.state().filter.lock().clone();
     let mut hasher = DefaultHasher::new();
     let cache = rp_ui.state().most_played.lock();
-    // An empty needle keeps every row of a library-sized cache, where a `Filter`'s `size_hint`
+    // An empty needle keeps every row of the snapshot, where a `Filter`'s `size_hint`
     // floor of `0` would grow the `Vec` from nothing. A real needle reserves nothing — no cheap
     // thing predicts the survivor count.
     let mut most_played: Vec<UiEntityStripRow> =
@@ -65,14 +68,28 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
     most_played.extend(
         cache
             .iter()
-            .filter(|t| most_played_matches(t, &needle))
-            .inspect(|t| t.hash(&mut hasher))
-            .map(to_slint_most_played_row),
+            .enumerate()
+            .filter(|(_, t)| most_played_matches(t, &needle))
+            .inspect(|(index, t)| {
+                index.hash(&mut hasher);
+                t.hash(&mut hasher);
+            })
+            .map(|(index, t)| {
+                let mut row = to_slint_most_played_row(t);
+                row.id = len_as_i32(index.saturating_add(1));
+                row
+            }),
     );
     drop(cache);
 
     let most_played_count = most_played.len();
-    PreparedGrid { tab, most_played, most_played_count, most_played_content: hasher.finish() }
+    PreparedGrid {
+        refresh_generation,
+        tab,
+        most_played,
+        most_played_count,
+        most_played_content: hasher.finish(),
+    }
 }
 
 /// Chunk the prepared rows into cards and push them into the grid's model. UI thread only, and
@@ -95,7 +112,7 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// empty the grid it just filled. And an apply that would repaint what is already on screen is
 /// dropped, `write_grid` being a `set_vec` reset that tears down every mounted card.
 fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: PreparedGrid) {
-    if !rp_ui.section_active() {
+    if !rp_ui.section_active() || !rp_ui.grid_refresh_is_current(prepared.refresh_generation) {
         return;
     }
 
@@ -129,7 +146,10 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
 }
 
 /// Apply from a worker thread, hopping to the event loop to write.
-pub(super) fn apply_filtered_grid(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
+pub(in crate::ui::recently_played) fn apply_filtered_grid(
+    rp_ui: &Arc<RecentlyPlayedUi>,
+    weak: &Weak<AppWindow>,
+) {
     let prepared = build_filtered_grid(rp_ui);
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
@@ -141,10 +161,7 @@ pub(super) fn apply_filtered_grid(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<App
 
 /// Apply for a settled keystroke: build on the calling worker, then post.
 ///
-/// **The one apply path that must not run on the UI thread.** The cache it walks is an uncapped,
-/// library-wide `get_most_played`, so on the event loop a keystroke folds a needle against every
-/// played track, hashes each survivor and builds three `SharedString`s for it, per debounce
-/// interval while typing.
+/// The filter walk stays on the worker so typing does not build card strings on the event loop.
 ///
 /// Deferring is safe here in a way it is not for a pick — the tab isn't moving, so the model still
 /// holds the previous needle's rows rather than the empty set a leave writes. What it *costs* is

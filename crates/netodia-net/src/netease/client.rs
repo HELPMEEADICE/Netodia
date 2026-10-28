@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use futures_util::{StreamExt as _, TryStreamExt as _};
 use netodia_core::entities::cloud::{
-    Account, Album, Artist, LikedSong, Lyrics, Playlist, Quality, RecentSong, SearchKind,
-    SearchResult, Song, StreamTicket,
+    Account, Album, Artist, LikedSong, Lyrics, PlayedSong, Playlist, Quality, RecentSong,
+    SearchKind, SearchResult, Song, StreamTicket,
 };
 use reqwest::header::{COOKIE, SET_COOKIE};
 use serde::de::DeserializeOwned;
@@ -713,6 +713,12 @@ impl Client {
         decode_recent_songs(&body)
     }
 
+    /// All-time listening ranking; `type: 0` selects `allData` rather than the weekly list.
+    pub async fn most_played_songs(&self, uid: i64) -> Result<Vec<PlayedSong>> {
+        let body = self.request(ep::USER_RECORD, json!({"uid":uid,"type":0})).await?;
+        decode_most_played_songs(body)
+    }
+
     /// Fetch liked songs in the order `NetEase` returns for the account's special liked playlist.
     /// Song details are fetched separately, so explicitly rejoin them by ID without allowing the
     /// detail endpoint's response order to change the server-provided favorite sequence.
@@ -930,6 +936,10 @@ fn decode_recent_songs(body: &Value) -> Result<Vec<RecentSong>> {
         }
     }
     Ok(songs)
+}
+
+fn decode_most_played_songs(body: Value) -> Result<Vec<PlayedSong>> {
+    field(body, "allData")
 }
 
 fn field<T: DeserializeOwned>(mut body: Value, name: &str) -> Result<T> {

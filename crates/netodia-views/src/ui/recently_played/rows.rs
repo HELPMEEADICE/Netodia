@@ -34,6 +34,7 @@ pub(super) fn install_recently_played_models(ui: &AppWindow) {
 pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(t.id),
+        remote_id: SharedString::from(t.id.to_string()),
         title: SharedString::from(t.title.as_str()),
         subtitle: opt_shared(t.artist.as_deref()),
         artwork_path: opt_shared(t.artwork_path.as_deref()),

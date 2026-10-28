@@ -25,7 +25,7 @@ use netodia_ui::AppWindow;
 /// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
 /// have run before it.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
-    covers::wire(ui);
+    covers::wire(ui, state);
     subviews::wire(ui, state, rp_ui);
     tracklist::wire(ui, state, rp_ui);
     lifecycle::wire(ui, state, rp_ui);

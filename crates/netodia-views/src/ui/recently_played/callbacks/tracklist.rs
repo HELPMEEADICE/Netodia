@@ -61,7 +61,7 @@ fn wire_play_row(g: &RecentlyPlayed<'_>, state: &AppState, rp_ui: &Arc<RecentlyP
     });
 }
 
-fn play_recent_queue(
+pub(super) fn play_recent_queue(
     state: &AppState,
     tracks: Vec<TrackSummary>,
     selected: i64,
@@ -114,13 +114,17 @@ fn wire_retry(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let rp_ui = rp_ui.clone();
     let weak = ui.as_weak();
     ui.global::<RecentlyPlayed>().on_retry_cloud(move || {
-        if !rp_ui.section_active() || rp_ui.active_tab() != RecentlyPlayedTab::Songs {
+        if !rp_ui.section_active() {
             return;
         }
         let state = state.clone();
         let rp_ui = rp_ui.clone();
         let weak = weak.clone();
         state.runtime.clone().spawn(async move {
+            if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
+                recently_played_ui_mod::refresh_grid(&state, &rp_ui, &weak).await;
+                return;
+            }
             if let Err(error) = recently_played_ui_mod::refresh_tracks(&state, &rp_ui, &weak).await
             {
                 log::warn!("recently_played::retry: {}", describe(&error));

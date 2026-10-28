@@ -205,6 +205,7 @@ fn install_models(ui: &AppWindow) {
 pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
+        remote_id: SharedString::default(),
         title: SharedString::from(a.name.as_str()),
         subtitle: SharedString::from(a.artist_name.as_str()),
         artwork_path: opt_shared(a.artwork_path.as_deref()),
@@ -219,6 +220,7 @@ pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
 pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
+        remote_id: SharedString::default(),
         title: SharedString::from(a.name.as_str()),
         subtitle: SharedString::from(subtitle),
         artwork_path: opt_shared(a.image_path.as_deref()),

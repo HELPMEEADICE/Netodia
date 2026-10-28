@@ -7,11 +7,10 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
-use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
+use netodia_app::cloud_playback::CloudQueueShuffle;
 use netodia_app::library;
 use netodia_app::state::AppState;
 use netodia_core::error::describe;
@@ -24,24 +23,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
     // play-track: clicking a Most Played card loads that grid into the queue and
     // starts on that card — the grid is the context, not the recency list on the
-    // other tab. The Slint callback carries no row index (these are cards, not
-    // list rows), so the start slot comes from the id.
+    // other tab. The callback carries the full cloud identity as a string.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
         g.on_play_track(move |id| {
-            let id = i64::from(id);
-            let ids = ru.most_played_track_ids();
-            if ids.is_empty() {
+            let Some(id) = crate::ui::util::parse_cloud_id(id.as_str()) else { return };
+            let tracks = ru.most_played_cloud_tracks();
+            if !tracks.iter().any(|track| track.id == id) {
                 return;
             }
-            let start = ids.iter().position(|&i| i == id);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "recently_played::play_track",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
-            );
+            super::tracklist::play_recent_queue(&s, tracks, id, CloudQueueShuffle::Preserve);
         });
     }
 
@@ -50,19 +42,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let s = state.clone();
         let ru = rp_ui.clone();
         g.on_shuffle_most_played(move || {
-            spawn_play_then_shuffle(
-                &s,
-                "recently_played::shuffle_most_played",
-                ru.most_played_track_ids(),
-            );
+            let tracks = ru.most_played_cloud_tracks();
+            let Some(first) = tracks.first().map(|track| track.id) else { return };
+            super::tracklist::play_recent_queue(&s, tracks, first, CloudQueueShuffle::Shuffle);
         });
     }
 
     // --- Tab switch -----------------------------------------------
     // The bar has already moved `tab-idx` and cleared the Slint-side filter by
     // the time this runs, so this is the catch-up: drop the Rust filter shadow to
-    // match, build the entering tab's model, then off-thread persist the pick and
-    // swap the cover tier over.
+    // match, build the entering tab's model, then off-thread persist the pick.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
@@ -129,22 +118,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 );
             }
 
-            // The grid's query only runs while its tab is mounted, so entering
-            // it is where a tick skipped on the Songs tab gets paid for. Spawned
-            // *after* the synchronous apply above, so whatever the cache already
-            // holds paints on this tick and the fetch refreshes behind it; the
-            // dirty flag is what keeps a pick back and forth from re-querying a
-            // cache nothing has invalidated. See `lifecycle::kick_full_refresh`.
-            //
-            // **And the apply's count has to be taken back, because the cache it
-            // walked is the one this fetch is about to fill.** A `0` there is the
-            // one value that means "there is nothing here" — it mounts
-            // `GridEmptyState`'s "Nothing played yet" over a library that has
-            // plenty, for a full uncapped `get_most_played` plus the cover-decode
-            // burst it awaits. `UNFETCHED_COUNT` matches neither `== 0` nor `> 0`,
-            // so the panel and the Shuffle pill both stay quiet until the fetch
-            // answers; the band's chips go with them, `most_played_chips` publishing
-            // none at a zero total, which is the shape an empty hero already has.
+            // Fetch after the synchronous apply so an existing snapshot paints immediately.
+            // An unfetched cache cannot assert "nothing played" while the cloud request runs.
             if needs_grid_fetch {
                 g.set_most_played_count(UNFETCHED_COUNT);
                 let s_fetch = s.clone();
@@ -155,23 +130,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 });
             }
 
-            let ru_covers = ru.clone();
             let s_disk = s.clone();
             let persist_disk = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                // Scoped to the write alone: a superseded tab drops its own disk
-                // hop, and the cover swap below is this task's regardless.
+                // A superseded tab must not overwrite a later pick on disk.
                 persist_disk.write_if_current(tab, || {
                     if let Err(e) = library::settings::set_recently_played_tab(&s_disk.paths, tab) {
                         log::warn!("recently_played::set_recently_played_tab: {}", describe(&e));
                     }
                 });
-                // A pick can't await a prewarm the way a fetch does — `TabBar` writes
-                // `selected-index` before it emits `selected`, so the rows are already
-                // in by now. Whatever the entering tab painted last visit is still in
-                // the tier as a proxy; this sharpens it, and anything genuinely absent
-                // schedules itself off the card's own lookup.
-                ru_covers.prewarm_tab_covers(entering);
             });
         });
     }
