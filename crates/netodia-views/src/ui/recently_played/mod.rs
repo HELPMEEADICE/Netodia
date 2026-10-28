@@ -2,19 +2,18 @@
 //!
 //! Songs is a capped `TrackList` of the most-recently-played tracks, fetched once per refresh and
 //! re-walked in memory on a keystroke. It mounts `sortable: false`: recency *is* the page, so its
-//! headers resize and toggle but never re-order. Most Played is a virtualized grid over an
-//! uncapped fetch of the library's played tracks by count.
+//! headers resize and toggle but never re-order. Most Played is a virtualized grid over the
+//! account's all-time listening ranking. Both tabs read cloud snapshots, not local statistics.
 //!
 //! The page's shared contract is `.claude/rules/ui-patterns.md`'s "three tabbed pages" block; the
 //! deltas below are this page's.
 //!
 //! The tree is split by the question each file answers rather than by tab. This file is the handle
-//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `covers.rs` the two tiers,
+//! and its teardown; `tabs.rs` the sub-view enum and its seeding,
 //! `rows.rs` the Slint models, `hero.rs` the band, `songs.rs` the Songs tab, and `grid/` the Most
 //! Played tab in three parts — `fetch`, `apply` and `warm`.
 
 mod callbacks;
-mod covers;
 mod grid;
 mod hero;
 mod rows;
@@ -85,24 +84,22 @@ pub struct RecentlyPlayedUi {
     active_tab: AtomicU8,
     /// [`SectionState`]'s dirty flag one level down, for Most Played alone.
     ///
-    /// **The section flag can't answer this, the page having one `SectionActiveGate` where My
-    /// Library has one per tab.** Ungated, both fetches ran on every `stats_changed` tick, so the
-    /// Songs tab paid a library-wide `get_most_played` and a fold over every played row for a grid
-    /// the user can't see. This is where a skipped tick is remembered, so the pick that mounts the
-    /// grid knows to fetch. Seeded `true`, so the first pick always does.
+    /// Seeded on entry, leave and account changes, so the Songs tab does not fetch a ranking
+    /// nobody can see and the first pick that mounts it always requests the current account.
     grid_dirty: AtomicBool,
     /// Bumped by every write to the filter needle, so a grid build running off the UI thread can
     /// tell whether it still answers the current one.
     ///
-    /// The Most Played walk is the app's one uncapped library-wide filter pass, so it builds on a
-    /// worker — and once a build outlives its keystroke, two can finish in either order and the
-    /// loser paints a needle the user has moved past. `write_filtered_grid`'s signature check
+    /// The Most Played walk builds on a worker — once a build outlives its keystroke, two can
+    /// finish in either order and the loser paints a needle the user has moved past.
+    /// `write_filtered_grid`'s signature check
     /// can't see it: a stale set has a *different* signature, which is exactly what it reads as
     /// "apply this".
     filter_generation: AtomicU64,
     /// Monotonic token for cloud-history refreshes. An older response must not overwrite a newer
     /// visit or account snapshot when requests finish out of order.
     tracks_refresh_generation: AtomicU64,
+    grid_refresh_generation: AtomicU64,
 }
 
 impl RecentlyPlayedUi {
@@ -116,6 +113,7 @@ impl RecentlyPlayedUi {
             grid_dirty: AtomicBool::new(true),
             filter_generation: AtomicU64::new(0),
             tracks_refresh_generation: AtomicU64::new(0),
+            grid_refresh_generation: AtomicU64::new(0),
         }
     }
 
@@ -158,11 +156,29 @@ impl RecentlyPlayedUi {
         self.tracks_refresh_generation.load(Ordering::Acquire) == generation
     }
 
+    pub(super) fn begin_grid_refresh(&self) -> u64 {
+        self.grid_refresh_generation.fetch_add(1, Ordering::AcqRel).wrapping_add(1)
+    }
+
+    pub(super) fn grid_refresh_is_current(&self, generation: u64) -> bool {
+        self.grid_refresh_generation.load(Ordering::Acquire) == generation
+    }
+
+    pub(super) fn grid_refresh_generation(&self) -> u64 {
+        self.grid_refresh_generation.load(Ordering::Acquire)
+    }
+
     /// Drop the previous account's recent-history snapshot before its replacement can arrive.
     pub(super) fn clear_account_tracks(&self) {
         self.begin_tracks_refresh();
+        self.begin_grid_refresh();
+        self.bump_filter_generation();
+        self.mark_grid_dirty();
+        self.forget_grid_signature();
         let _gate = self.gate();
         self.inner.tracks_all.lock().clear();
+        self.inner.most_played.lock().clear();
+        *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
         *self.inner.songs_totals.lock() = SongsTotals::default();
         *self.inner.songs_fold.lock() = HeroFold::default();
         self.inner.applied_selection.lock().clear();
@@ -189,14 +205,13 @@ impl RecentlyPlayedUi {
         self.inner.last_grid_signature.lock().take();
     }
 
-    /// Drop the large local Most Played grid when this page is hidden, but keep the small cloud
+    /// Drop the Most Played grid when this page is hidden, but keep the small cloud
     /// history snapshot so the Songs tab paints immediately on its next visit. Runs off the UI
     /// thread after the section leave marks its pending refresh.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
         }
-        crate::ui::grid_prewarm::shrink_covers();
         {
             let _gate = self.gate();
             self.inner.most_played.lock().clear();
@@ -205,7 +220,7 @@ impl RecentlyPlayedUi {
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }
-        // Re-arm the local Most Played fetch beside the grid cache it emptied.
+        // Re-arm the cloud ranking fetch beside the grid cache it emptied.
         self.mark_grid_dirty();
         netodia_platform::services::platform::allocator::trim();
     }
@@ -214,18 +229,34 @@ impl RecentlyPlayedUi {
         &self.inner
     }
 
-    /// Track ids of the Most Played grid, in card order, so a card there loads that grid rather
-    /// than the recency list on the other tab. Filtered through the same predicate
-    /// `grid::apply::build_filtered_grid` builds the model with — the raw cache would enqueue
-    /// cards that aren't on screen.
-    pub fn most_played_track_ids(&self) -> Vec<i64> {
+    /// Reuse the ranking's metadata and server order in the cloud queue, with the same filter as
+    /// the visible cards. Original 64-bit song identities never go through Slint integers.
+    pub fn most_played_cloud_tracks(&self) -> Vec<netodia_core::entities::track::TrackSummary> {
         let needle = self.inner.filter.lock().clone();
         self.inner
             .most_played
             .lock()
             .iter()
-            .filter(|t| crate::ui::row_match::most_played_matches(t, &needle))
-            .map(|t| t.id)
+            .filter(|row| crate::ui::row_match::most_played_matches(row, &needle))
+            .map(|row| netodia_core::entities::track::TrackSummary {
+                id: row.id,
+                title: row.title.clone(),
+                file_name: row.title.clone(),
+                artist: row.artist.clone(),
+                album: row.album.clone(),
+                duration_ms: row.duration_ms,
+                artwork_path: row.artwork_path.clone(),
+                is_favorite: row.is_favorite,
+                file_path: String::new(),
+                track_number: None,
+                disc_number: None,
+                last_position: 0,
+                rating: 0,
+                replaygain_track_gain: None,
+                replaygain_track_peak: None,
+                replaygain_album_gain: None,
+                replaygain_album_peak: None,
+            })
             .collect()
     }
 
@@ -259,6 +290,9 @@ impl RecentlyPlayedUi {
     /// is independent of both flags.
     pub fn flip_track_favorite(&self, id: i64, fav: bool) {
         if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.is_favorite = fav;
+        }
+        if let Some(r) = self.inner.most_played.lock().iter_mut().find(|r| r.id == id) {
             r.is_favorite = fav;
         }
     }

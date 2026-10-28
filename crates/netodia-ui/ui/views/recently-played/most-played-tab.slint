@@ -3,9 +3,10 @@ import { RecentlyPlayed } from "../../globals/curated.slint";
 import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { ActionPill, PillButton } from "../../components/action-pill.slint";
 
-// The Most Played tab: an `EntityCardGrid` over the library's played tracks,
-// ranked by count. It takes the host's grid geometry rather than deriving its
+// The Most Played tab: an `EntityCardGrid` over the account's all-time listening
+// ranking. It takes the host's grid geometry rather than deriving its
 // own — the page owns one, and there is nothing per-tab about a card.
 export component RecentlyPlayedMostPlayedTab inherits Rectangle {
     in property <length> card-w;
@@ -25,19 +26,47 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         show-play-count: true;
-        // These cards are tracks, so the menu's entity arm resolves each id to itself.
+        cloud-tracks: true;
+        // Cloud cards retain exact song ids across Slint's 32-bit integer boundary.
         card-kind: "track";
         selection-scope: "rp-most-played";
-        // The ranking spans the whole library, so a heart left up marks which cards are kept.
         covers-generation: RecentlyPlayed.covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
-        row-clicked(id) => { RecentlyPlayed.play-track(id); }
+        cloud-row-clicked(id) => { RecentlyPlayed.play-track(id); }
     }
 
-    if RecentlyPlayed.most-played-count == 0: GridEmptyState {
+    if RecentlyPlayed.most-played-count == 0
+        && !RecentlyPlayed.most-played-loading
+        && RecentlyPlayed.most-played-error == "": GridEmptyState {
         icon: "bar_chart";
         title: @tr("Nothing played yet");
         body: @tr("Play something and it will show up here.");
+    }
+
+    if RecentlyPlayed.most-played-loading && RecentlyPlayed.most-played-rows.length == 0: Text {
+        x: Theme.pad-lg;
+        y: Theme.pad-lg;
+        text: @tr("Loading NetEase history…");
+        color: Theme.subtext0;
+    }
+
+    if RecentlyPlayed.most-played-error != "" && RecentlyPlayed.most-played-rows.length == 0: VerticalLayout {
+        x: Theme.pad-lg;
+        y: Theme.pad-lg;
+        width: parent.width - 2 * Theme.pad-lg;
+        spacing: Theme.pad-md;
+        Text {
+            text: RecentlyPlayed.most-played-error;
+            color: Theme.subtext0;
+            wrap: word-wrap;
+        }
+        ActionPill {
+            PillButton {
+                icon: "refresh";
+                text: @tr("Retry");
+                clicked => { RecentlyPlayed.retry-cloud(); }
+            }
+        }
     }
 
     OverlayScrollbar {

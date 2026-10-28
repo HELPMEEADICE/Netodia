@@ -52,6 +52,7 @@ pub const FM_TRASH: Endpoint<'static> = Endpoint::write("/api/radio/trash/add", 
 pub const USER_PLAYLISTS: Endpoint<'static> = Endpoint::read("/api/user/playlist", Weapi);
 pub const LIKED: Endpoint<'static> = Endpoint::read("/api/song/like/get", Weapi);
 pub const RECENT_SONGS: Endpoint<'static> = Endpoint::read("/api/play-record/song/list", Weapi);
+pub const USER_RECORD: Endpoint<'static> = Endpoint::read("/api/v1/play/record", Weapi);
 pub const WEBLOG: Endpoint<'static> = Endpoint::write("/api/feedback/weblog", Eapi);
 pub const LIKE: Endpoint<'static> = Endpoint::write("/api/radio/like", Weapi);
 pub const PLAYLIST_SUBSCRIBE: Endpoint<'static> = Endpoint::write("/api/playlist/subscribe", Weapi);

@@ -146,6 +146,8 @@ export global Favorites {
 // **The filter is shared across both tabs, and neither has a sort**: Songs mounts `sortable: false`
 // — recency *is* the page — and Most Played's title names its own ordering.
 export global RecentlyPlayed {
+    in-out property <bool> most-played-loading: false;
+    in-out property <string> most-played-error;
     // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
     // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
     out property <int> tab-songs: 0;
@@ -209,7 +211,7 @@ export global RecentlyPlayed {
     callback shuffle-most-played();
 
     // A Most Played card click starts playback in that scope.
-    callback play-track(int /*track_id*/);
+    callback play-track(string /*song_id*/);
 
     // The Tracks / Favorites row shape.
     callback play-row(int /*track_id*/, int /*index*/);

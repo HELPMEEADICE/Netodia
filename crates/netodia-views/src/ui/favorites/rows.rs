@@ -37,6 +37,7 @@ pub(super) fn install_favorites_models(ui: &AppWindow) {
 pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(t.id),
+        remote_id: SharedString::default(),
         title: SharedString::from(t.title.as_str()),
         subtitle: opt_shared(t.artist.as_deref()),
         artwork_path: opt_shared(t.artwork_path.as_deref()),
@@ -53,6 +54,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
+        remote_id: SharedString::default(),
         title: SharedString::from(a.name.as_str()),
         subtitle,
         artwork_path: opt_shared(a.image_path.as_deref()),

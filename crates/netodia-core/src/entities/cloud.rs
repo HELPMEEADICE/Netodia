@@ -98,6 +98,14 @@ pub struct RecentSong {
     pub played_at_ms: i64,
 }
 
+/// An entry in the account's all-time listening ranking, with the server's play count.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayedSong {
+    pub song: Song,
+    #[serde(rename = "playCount")]
+    pub play_count: i32,
+}
+
 impl Song {
     pub fn artist_names(&self) -> String {
         self.artists.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(" / ")

@@ -1,11 +1,6 @@
-//! The Most Played tab — a virtualized `EntityCardGrid` over the library's
-//! played tracks, ranked by count.
-//!
-//! The query is uncapped, only on-screen rows instantiating cards; the cover
-//! prewarm is capped at `GRID_PREWARM_AHEAD` because warming to a tier's capacity
-//! over an uncapped grid evicts its own earlier work before a card asks for one.
-//! Both run only while this tab is mounted and the section on screen — the two
-//! tabs are mutually exclusive, so a hidden grid holds rows nobody can see.
+//! The Most Played tab — a virtualized `EntityCardGrid` over the signed-in account's all-time
+//! listening ranking. Its snapshot, order and play counts come from `NetEase`, independently of
+//! the local library. Remote covers are loaded lazily for visible cards.
 //!
 //! Every fetch / apply path re-walks the cached `Vec` through the current
 //! `RecentlyPlayed.filter` before writing the model, on the same
@@ -19,6 +14,7 @@ mod apply;
 mod fetch;
 mod warm;
 
+pub(super) use apply::apply_filtered_grid;
 pub use apply::{apply_filtered_grid_now, apply_filtered_grid_settled};
 pub use fetch::refresh_grid;
 

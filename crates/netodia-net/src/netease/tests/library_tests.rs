@@ -4,6 +4,60 @@ use crate::netease::endpoints::Protocol;
 use netodia_core::entities::cloud::Quality;
 use serde_json::json;
 
+#[test]
+fn all_time_ranking_retains_every_song_count_and_large_id() -> Result<()> {
+    let songs = super::decode_most_played_songs(json!({
+        "allData": [
+            {"playCount": 100, "score": 100, "song": {"id": 4_000_000_001_i64, "name": "First", "artists": [{"id": 7, "name": "Artist"}], "album": {"id": 1, "name": "Album", "picUrl": "https://p1.music.126.net/a.jpg"}, "duration": 210000}},
+            {"playCount": 42, "score": 42, "song": {"id": 4_000_000_002_i64, "name": "Second"}},
+            {"playCount": 1, "score": 1, "song": {"id": 7, "name": "Third"}}
+        ],
+        "weekData": [{"playCount": 5, "song": {"id": 99, "name": "Weekly"}}]
+    }))?;
+
+    assert_eq!(
+        songs.iter().map(|entry| entry.song.id).collect::<Vec<_>>(),
+        [4_000_000_001, 4_000_000_002, 7]
+    );
+    assert_eq!(songs.iter().map(|entry| entry.play_count).collect::<Vec<_>>(), [100, 42, 1]);
+    assert_eq!(songs[0].song.artist_names(), "Artist");
+    assert_eq!(songs[0].song.duration_ms, 210_000);
+    assert_eq!(songs[0].song.album.cover_url.as_deref(), Some("https://p1.music.126.net/a.jpg"));
+    Ok(())
+}
+
+#[test]
+fn empty_ranking_and_invalid_responses_are_distinct() -> Result<()> {
+    assert!(super::decode_most_played_songs(json!({"allData": []}))?.is_empty());
+    assert!(super::decode_most_played_songs(json!({"weekData": []})).is_err());
+    assert!(super::decode_most_played_songs(json!({"allData": null})).is_err());
+    assert!(
+        super::decode_most_played_songs(
+            json!({"allData": [{"song": {"id": 42, "name": "Missing count"}}]})
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn listening_ranking_uses_the_native_weapi_route() -> Result<()> {
+    let client = super::Client::new(reqwest::Client::new());
+    let request = client
+        .prepare_request(
+            ep::USER_RECORD,
+            json!({"uid":42,"type":0}),
+            &std::collections::BTreeMap::new(),
+        )
+        .await?
+        .build()
+        .map_err(|_| crate::netease::Error::InvalidResponse)?;
+    assert_eq!(request.url().as_str(), "https://music.163.com/weapi/v1/play/record");
+    assert_eq!(ep::USER_RECORD.protocol, Protocol::Weapi);
+    const { assert!(ep::USER_RECORD.read_only) };
+    Ok(())
+}
+
 #[tokio::test]
 async fn listening_uses_clientlog_eapi_with_the_desktop_reporting_profile() -> Result<()> {
     let client = super::Client::new(reqwest::Client::new());
