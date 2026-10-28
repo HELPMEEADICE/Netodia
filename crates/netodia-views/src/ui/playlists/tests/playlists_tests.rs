@@ -29,18 +29,25 @@ const GRID_CALLBACKS: &str = include_str!("../callbacks/grid.rs");
 const ENTRY_CARD: &str =
     include_str!("../../../../../netodia-ui/ui/views/my-library/entry-card.slint");
 
-/// `FocusScope` accepts an unfocused press before a sibling below it can receive it. Both
-/// recommendation and roaming entries must take focus through the same click that activates.
+/// Entry cards start a list with a click; retaining keyboard focus would turn the next Space
+/// into another activation instead of the shared transport toggle.
 #[test]
-fn entry_card_focus_does_not_consume_the_first_activation() {
+fn entry_cards_leave_keyboard_shortcuts_with_the_shared_transport() {
     let src = code_tokens(ENTRY_CARD);
-    let focus = block_after(&src, "focus := FocusScope");
-    assert_eq!(binding_value(focus, "focus-on-click:").trim(), "false");
-
+    assert!(!src.contains("FocusScope"));
+    assert!(!src.contains("forward-focus:"));
+    assert!(!src.contains("key-pressed("));
     let touch = block_after(&src, "touch := TouchArea");
     let clicked = block_after(touch, "clicked =>");
-    assert!(clicked.contains("focus.focus();"));
     assert!(clicked.contains("root.activated();"));
+    let accessible = block_after(&src, "accessible-action-default =>");
+    assert!(accessible.contains("root.activated();"));
+
+    let shortcuts =
+        code_tokens(include_str!("../../../../../netodia-ui/ui/layout/shortcut-scope.slint"));
+    let space = block_after(&shortcuts, "if (ev.text == \" \")");
+    assert!(space.contains("Player.play-pause();"));
+    assert!(space.contains("return accept;"));
 }
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort

@@ -329,6 +329,16 @@ impl CloudPlayback {
         }
         let selected_id =
             songs.first().ok_or_else(|| AppError::Queue("暂时没有可播放的漫游歌曲".to_owned()))?.id;
+        // Like ordinary cloud playlists, warm membership before building player/queue hearts.
+        // A failed lookup must not prevent playback; a newer transport action must still win.
+        if self.cloud.cached_is_liked(selected_id).is_none() {
+            let _ = self.cloud.liked_ids().await;
+        }
+        if self.queue_generation() != queue_generation
+            || !self.engine.is_playback_request_current(playback_generation)
+        {
+            return Ok(CloudPlaybackResult { started: false, trial: false });
+        }
         let tracks = songs
             .into_iter()
             .map(|song| {

@@ -51,19 +51,6 @@ export component LibraryEntryCard inherits Rectangle {
     }
     touch := TouchArea {
         mouse-cursor: pointer;
-        clicked => {
-            focus.focus();
-            root.activated();
-        }
+        clicked => { root.activated(); }
     }
-    focus := FocusScope {
-        // This layer sits above `touch`: automatic focus would consume the first press.
-        // Let the completed card click take focus and activate together.
-        focus-on-click: false;
-        key-pressed(event) => {
-            if (event.text == " " || event.text == "\n") { root.activated(); return accept; }
-            return reject;
-        }
-    }
-    forward-focus: focus;
 }
