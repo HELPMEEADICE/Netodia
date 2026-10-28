@@ -40,7 +40,6 @@ use crate::ui::track_detail::DetailCache;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use netodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use netodia_core::entities::cloud::MusicLibraryCategory;
 use netodia_core::entities::playlist::PlaylistStats;
 use netodia_core::entities::track::{TrackListRow as RsTrackListRow, TrackSummary};
 use netodia_ui::{
@@ -118,6 +117,7 @@ impl PlaylistsUi {
             grid: PlaylistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
+                categories: Mutex::new(std::collections::HashMap::new()),
             },
             detail: PlaylistDetailState {
                 cache: DetailCache::default(),
@@ -129,8 +129,16 @@ impl PlaylistsUi {
         }
     }
 
-    fn category(&self) -> MusicLibraryCategory {
-        MusicLibraryCategory::from_index(self.category.load(Ordering::Acquire))
+    fn restore_category(&self, account_generation: u64) -> bool {
+        let _gate = self.section.gate();
+        let categories = self.grid.categories.lock();
+        let cached = categories
+            .get(&self.category.load(Ordering::Acquire))
+            .filter(|cached| cached.account_generation == account_generation);
+        *self.grid.data.lock() = cached
+            .map_or_else(|| Arc::new(GridData::new(Vec::new())), |cached| cached.data.clone());
+        *self.grid.index_cache.lock() = None;
+        cached.is_some_and(|cached| cached.fetched_at.elapsed() < grid::CATEGORY_CACHE_TTL)
     }
 
     fn grid_request_current(&self, request: u64) -> bool {
@@ -145,18 +153,15 @@ impl PlaylistsUi {
         crate::ui::window_chrome::set_current_playlist_id(-1);
         self.detail_artwork.clear();
         let _gate = self.section.gate();
+        self.grid.categories.lock().clear();
         *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
         *self.grid.index_cache.lock() = None;
         self.detail.cache.clear();
         self.detail.position_order.lock().clear();
     }
 
-    /// Drop everything resident in the Playlists section — grid covers,
-    /// detail artwork pair, canonical grid data, memoized indices,
-    /// cached detail tracks, applied-selection shadow — then return the
-    /// freed pages to the OS. Race-correct against an in-flight
-    /// `fetch_grid` via `mutation_gate` (see `AlbumsUi::release_section_state`
-    /// for the contract).
+    /// Release transient projections and detail buffers, retaining the bounded category cache
+    /// for the next visit. The section gate serializes release against in-flight fetches.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
@@ -239,6 +244,11 @@ impl PlaylistsUi {
         let mut data = self.grid.data.lock();
         if !Arc::make_mut(&mut data).update_track_stats(detail) {
             return false;
+        }
+        if let Some(cached) =
+            self.grid.categories.lock().get_mut(&self.category.load(Ordering::Acquire))
+        {
+            cached.data = data.clone();
         }
         *self.grid.index_cache.lock() = None;
         true

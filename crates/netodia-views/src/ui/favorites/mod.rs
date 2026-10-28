@@ -29,12 +29,11 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork;
-use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::hero_folds::MostPlayedTotals;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use netodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use netodia_core::entities::track::FavoriteStats;
 
 use state::FavoritesUiState;
 
@@ -172,7 +171,7 @@ impl FavoritesUi {
         self.inner.last_grid_signature.lock().take();
     }
 
-    /// Drop every section-local buffer and clear the Slint models, so a hidden page holds nothing.
+    /// Release transient grids and selections while retaining the account's lists and banners.
     /// Runs off the UI thread on section leave, which set `mark_dirty()` synchronously.
     ///
     /// Release order matches `AlbumsUi::release_section_state`: per-section LRUs first, then
@@ -192,13 +191,11 @@ impl FavoritesUi {
             // Keep the liked songs as a stale-while-revalidate cache. The Slint model is emptied
             // on the UI thread, then rebuilt from these rows immediately when Songs is entered;
             // the lifecycle callback refreshes the account list in the background every time.
-            *self.inner.stats.lock() =
-                FavoriteStats { count: 0, total_duration_ms: 0, artwork_paths: Vec::new() };
+            if self.section_active() {
+                return;
+            }
             self.inner.most_played.lock().clear();
             self.inner.fav_artists.lock().clear();
-            // The folds go with the caches they summarise: a derived value outliving its source is
-            // the one thing the band can state that is *wrong* rather than merely absent.
-            *self.inner.songs_fold.lock() = HeroFold::default();
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }

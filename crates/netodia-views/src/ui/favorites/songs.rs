@@ -219,6 +219,7 @@ async fn restore_cached_tracks(
     let revision = state.cloud.liked_ids_revision();
     let Some(songs) = state.cloud.cached_liked_songs().await else { return };
     let rows: Vec<_> = songs.into_iter().map(cloud_song_row).collect();
+    let stats = super::hero::stats_from_tracks(&rows);
     let sort = current_sort(fav_ui);
     let fold = crate::ui::hero_folds::fold_tracks(&rows);
     {
@@ -232,6 +233,7 @@ async fn restore_cached_tracks(
         }
         fav_ui.state().tracks_all.store(rows, &sort.field, dir_token(sort.dir));
         *fav_ui.state().songs_fold.lock() = fold;
+        *fav_ui.state().stats.lock() = stats;
     }
     apply_filtered_tracks(fav_ui, weak);
     super::hero::republish_chips(fav_ui, weak);

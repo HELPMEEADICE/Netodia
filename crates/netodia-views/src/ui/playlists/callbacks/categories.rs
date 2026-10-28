@@ -15,17 +15,23 @@ use netodia_engine::player::engine::state::lock_state;
 use netodia_ui::{AppWindow, MyLibrary, PlaylistDetail, Playlists};
 
 use super::super::{PlaylistsUi, fetch_grid, open_playlist};
+use crate::ui::callbacks::index_persist::IndexPersist;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let weak = ui.as_weak();
     let s = state.clone();
     let pu = playlists_ui.clone();
+    let persist = Arc::new(IndexPersist::new(ui.global::<Playlists>().get_category()));
     ui.global::<Playlists>().on_category_changed(move |category| {
         let Some(ui) = weak.upgrade() else { return };
         let category =
             crate::ui::tab_bar::clamp_tab(category, ui.global::<Playlists>().get_category_count());
-        pu.category.store(category, Ordering::Release);
-        pu.grid_request.fetch_add(1, Ordering::AcqRel);
+        let grid_request = {
+            let _gate = pu.section.gate();
+            pu.category.store(category, Ordering::Release);
+            pu.grid_request.fetch_add(1, Ordering::AcqRel).wrapping_add(1)
+        };
+        persist.publish(category);
         pu.detail_request.fetch_add(1, Ordering::AcqRel);
         let detail = ui.global::<PlaylistDetail>();
         if detail.get_playlist_id() >= 0 {
@@ -37,30 +43,31 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let playlists = ui.global::<Playlists>();
         playlists.set_cloud_error(slint::SharedString::default());
         playlists.set_retry_special(-1);
-        playlists.set_cloud_loading(true);
-        playlists.set_total_count(-1);
-        crate::ui::model_diff::clear_vec_model::<netodia_ui::PlaylistGridRow>(
-            &playlists.get_grid_rows(),
-            "library category change",
-        );
+        let fresh = super::super::grid::restore_cached_grid(&ui, &pu, s.cloud.status().generation);
+        playlists.set_cloud_loading(!fresh);
         let s = s.clone();
         let pu = pu.clone();
         let weak = weak.clone();
+        let persist = persist.clone();
         s.runtime.clone().spawn(async move {
             let paths = s.paths.clone();
             let saved = tokio::task::spawn_blocking(move || {
-                mutate_view_state(&paths, |view| {
-                    view.music_library_category = category;
-                })
+                persist.write_if_current(category, || {
+                    if let Err(error) = mutate_view_state(&paths, |view| {
+                        view.music_library_category = category;
+                    }) {
+                        log::warn!("library category persistence: {}", describe(&error));
+                    }
+                });
             })
             .await;
-            if let Err(description) = saved
-                .map_err(|join_error| describe(&join_error))
-                .and_then(|result| result.map_err(|persist_error| describe(&persist_error)))
-            {
-                log::warn!("library category persistence: {description}");
+            if let Err(error) = saved {
+                log::warn!("library category persistence: {}", describe(&error));
             }
-            if let Err(error) = fetch_grid(&s, &pu, weak).await {
+            if !fresh
+                && pu.grid_request_current(grid_request)
+                && let Err(error) = fetch_grid(&s, &pu, weak).await
+            {
                 log::warn!("library category: {}", describe(&error));
             }
         });

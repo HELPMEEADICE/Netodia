@@ -146,6 +146,7 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         } else {
             clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab");
         }
+        favorites_ui_mod::hero::restore_now(&ui, &fu);
 
         // Spawned *after* the synchronous applies above, so whatever the
         // cache already holds paints on this tick and the fetch refreshes
