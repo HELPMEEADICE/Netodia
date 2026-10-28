@@ -8,7 +8,7 @@
 use super::detail::{POSITION_FIELD, is_manual_order, sort_playlist_tracks};
 use super::*;
 use netodia_core::entities::track::TrackListRow;
-use netodia_testkit::{binding_value, block_after, code_tokens};
+use netodia_testkit::{block_after, code_tokens};
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../netodia-ui/ui/components/track-list/draggable-track-list.slint");
