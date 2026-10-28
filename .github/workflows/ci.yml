@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: Rust formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test release version preparation
+        run: python -m unittest discover -s scripts -p 'test_*.py'
+      - uses: ./.github/actions/setup-rust
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/cargo-audit
+
+  quality-linux:
+    name: Rust and Slint checks (Linux)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/linux-system-deps
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ci-clippy
+      - name: Check Slint UI compilation
+        run: cargo check --locked -p netodia-ui
+      - name: Run Clippy
+        run: cargo clippy --all-targets --locked --workspace -- -D warnings
+
+  test-linux:
+    name: Tests (Linux)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/linux-system-deps
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ci-test
+      - uses: ./.github/actions/headless-audio
+      - name: Run workspace tests
+        run: cargo test --locked --workspace
+
+  quality-windows:
+    name: Rust checks (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ci-clippy
+      - name: Run Clippy
+        run: cargo clippy --all-targets --locked --workspace -- -D warnings
+
+  test-windows:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+        with:
+          shared-key: ci-test
+      - name: Run workspace tests
+        run: cargo test --locked --workspace -- --skip headless_scan_persists_track
+
+  quality:
+    name: quality
+    if: always()
+    needs: [fmt, audit, quality-linux, test-linux, quality-windows, test-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every check to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          not_green="$(jq -r '
+            to_entries[]
+            | select(.value.result != "success")
+            | "  \(.key): \(.value.result)"' <<<"$NEEDS")"
+          if [[ -n "$not_green" ]]; then
+            echo "Checks that failed, were skipped, or were cancelled:"
+            echo "$not_green"
+            exit 1
+          fi
+          echo "All checks passed"
+

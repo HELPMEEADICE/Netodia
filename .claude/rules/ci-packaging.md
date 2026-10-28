@@ -19,15 +19,13 @@ paths:
 # CI and packaging
 
 The package matrix and updater contract live in .claude/rules/updater.md; this rule covers the
-single workflow that checks, builds and publishes those packages.
+separate workflows that check, build and publish those packages.
 
-## Checks and build gate
+## Checks
 
-.github/workflows/release.yml runs the quality checks on pull requests to main, pushes to main,
-published Releases and manual dispatches. Its check jobs run independently; the quality aggregate
-waits for all of them and fails unless each result is success. The release/manual build job depends
-on that aggregate, so it cannot package a commit that failed a check. Pull requests and pushes run
-checks only.
+.github/workflows/ci.yml runs quality checks on pull requests and pushes to main. Its check jobs
+run independently; the quality aggregate waits for all of them and fails unless each result is
+success. The release and manual build workflow is independent of CI.
 
 - fmt runs cargo fmt --all --check with the pinned toolchain.
   It also runs the Python release-version regression tests, which need no Rust toolchain.
@@ -51,7 +49,7 @@ checks only.
 
 The workflow checks Rust formatting, Slint compilation, Clippy, the Linux and Windows test suites,
 and RustSec advisories. Keep the quality job's needs list in sync with every check job. The
-packaging job must continue to depend on the aggregate.
+release build does not depend on the aggregate.
 
 ## Release and manual builds
 
@@ -62,7 +60,8 @@ then uses cargo update --workspace to synchronize workspace versions in Cargo.lo
 third-party dependency pins; the build still uses --locked. Publish resolves the same tag version
 for signatures and latest.json. Manual runs keep the committed manifest and lockfile. The build matrix
 has six formats for each supported architecture: Linux tarball, AppImage, RPM and DEB; Windows MSI and
-portable ZIP; x86_64 and aarch64. BINARY must point at
+portable ZIP; x86_64 and aarch64. Each OS/architecture combination uses one runner to build once
+and package every format for that target. BINARY must point at
 target/<target-triple>/release/Netodia because the Linux package scripts consume that environment
 variable. Keep artifact names compatible with scripts/build-latest-json.py's PLATFORM_PATTERNS.
 
@@ -73,7 +72,7 @@ requires MINISIGN_SECRET_KEY (the entire secret key file encoded as base64) and 
 repository secrets. The release-signing preflight signs a small payload and verifies it against
 assets/updater-pubkey.b64 before any matrix build starts, catching missing secrets, wrong passwords
 and mismatched key pairs. Manual
-dispatches run the same quality gate and build matrix, then expose unsigned package files as Actions
+dispatches run the build matrix independently of CI, then expose unsigned package files as Actions
 artifacts for 30 days; they do not update a Release or the updater manifest.
 
 Every external action is SHA-pinned with a trailing version comment. Use .github/actions/setup-rust

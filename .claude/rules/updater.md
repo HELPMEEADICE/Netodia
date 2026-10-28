@@ -124,8 +124,8 @@ from `main.rs` without ever opening this file.
   over `actions/attest` and points new work at that directly — worth folding in next time this line
   is touched.
 
-- **aarch64 builds alongside x86_64** (Linux + Windows): the 12 matrix slots `release.yml`
-  declares, 6 × x86_64 + 6 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`).
+- **aarch64 builds alongside x86_64** (Linux + Windows): the four matrix slots `release.yml`
+  declares, one per OS and architecture (`ubuntu-24.04-arm`/`windows-11-arm` for ARM).
   Each architecture ships Linux tarball/AppImage/RPM/DEB and Windows MSI/portable ZIP.
   **`build-latest-json.py`'s `PLATFORM_PATTERNS` is downstream of `release.yml`'s
   packaging steps and the `scripts/build-*.sh` they call, and must move with them.**

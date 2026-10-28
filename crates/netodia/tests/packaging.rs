@@ -256,7 +256,7 @@ fn workflow_job_needs<'a>(src: &'a str, job: &str) -> Vec<&'a str> {
 fn the_quality_aggregate_waits_on_every_check() {
     const AGGREGATE: &str = "quality";
 
-    let path = Path::new(REPO_ROOT).join(".github/workflows/release.yml");
+    let path = Path::new(REPO_ROOT).join(".github/workflows/ci.yml");
     let src = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(!src.is_empty(), "unreadable or empty: {}", path.display());
 
@@ -270,27 +270,18 @@ fn the_quality_aggregate_waits_on_every_check() {
     let gated = workflow_job_needs(&src, AGGREGATE);
     assert!(!gated.is_empty(), "`{AGGREGATE}`'s `needs:` list did not parse");
 
-    let ungated: Vec<_> = jobs
-        .iter()
-        .filter(|id| {
-            **id != AGGREGATE && **id != "build" && **id != "publish" && !gated.contains(id)
-        })
-        .collect();
+    let ungated: Vec<_> =
+        jobs.iter().filter(|id| **id != AGGREGATE && !gated.contains(id)).collect();
     assert!(
         ungated.is_empty(),
         "{ungated:?} are missing from `{AGGREGATE}`'s `needs:`, so the required check never \
          waits on them and can go green while they fail"
     );
-    assert_eq!(
-        workflow_job_needs(&src, "build"),
-        vec![AGGREGATE],
-        "release packaging must wait for the quality aggregate"
-    );
 }
 
 #[test]
 fn workflow_runs_rust_and_slint_checks_on_changes() {
-    let path = Path::new(REPO_ROOT).join(".github/workflows/release.yml");
+    let path = Path::new(REPO_ROOT).join(".github/workflows/ci.yml");
     let workflow = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(!workflow.is_empty(), "unreadable or empty: {}", path.display());
 
@@ -303,7 +294,50 @@ fn workflow_runs_rust_and_slint_checks_on_changes() {
         "cargo test --locked --workspace",
         "uses: ./.github/actions/cargo-audit",
     ] {
-        assert!(workflow.contains(required), "release.yml is missing {required:?}");
+        assert!(workflow.contains(required), "ci.yml is missing {required:?}");
+    }
+}
+
+/// Each target compiles once and produces every format on the same runner. CI remains
+/// independent so a failed check does not prevent a manual or published-release build.
+#[test]
+fn release_builds_each_target_once_without_a_ci_gate() {
+    let path = Path::new(REPO_ROOT).join(".github/workflows/release.yml");
+    let src = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(!src.is_empty(), "unreadable or empty: {}", path.display());
+    assert_eq!(workflow_job_needs(&src, "build"), vec!["release-signing"]);
+    assert!(src.contains("  release:\n    types: [published]"));
+    assert!(src.contains("  workflow_dispatch:"));
+    assert!(!src.contains("  pull_request:"));
+    assert!(!src.contains("  push:"));
+
+    let targets: Vec<_> = src
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("- { target: "))
+        .filter_map(|line| line.split_once(',').map(|(target, _)| target))
+        .collect();
+    assert_eq!(
+        targets,
+        [
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc",
+            "aarch64-pc-windows-msvc",
+        ],
+        "the release matrix must contain one runner per target"
+    );
+    for (name, os) in [
+        ("Package Linux tarball", "linux"),
+        ("Package AppImage", "linux"),
+        ("Package RPM", "linux"),
+        ("Package deb", "linux"),
+        ("Package MSI", "windows"),
+        ("Package portable ZIP", "windows"),
+    ] {
+        assert!(
+            src.contains(&format!("- name: {name}\n        if: matrix.os == '{os}'")),
+            "{name} must run on the {os} target runner"
+        );
     }
 }
 
@@ -325,7 +359,7 @@ fn workspace_test_jobs_keep_line_tables_for_backtraces() {
     const KEYS: [&str; 2] = ["CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"];
     const TEST_JOBS: [&str; 2] = ["test-linux", "test-windows"];
 
-    let path = Path::new(REPO_ROOT).join(".github/workflows/release.yml");
+    let path = Path::new(REPO_ROOT).join(".github/workflows/ci.yml");
     let workflow = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(!workflow.is_empty(), "unreadable or empty: {}", path.display());
 
@@ -334,7 +368,7 @@ fn workspace_test_jobs_keep_line_tables_for_backtraces() {
             assert_eq!(
                 workflow_job_env(&workflow, job, key),
                 Some("line-tables-only"),
-                "release.yml's `{job}` must keep `file:line` in its backtraces"
+                "ci.yml's `{job}` must keep `file:line` in its backtraces"
             );
         }
     }
