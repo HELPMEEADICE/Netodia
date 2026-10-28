@@ -49,6 +49,7 @@ open.workspace = true
 
 [dev-dependencies]
 netodia-testkit = { path = "../netodia-testkit" }
+slint = { workspace = true, features = ["renderer-software"] }
 tempfile.workspace = true
 
 [lints]

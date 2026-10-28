@@ -2,7 +2,7 @@ import { Theme } from "../../theme.slint";
 import { Favorites } from "../../globals/curated.slint";
 import { CloudEntityDetail } from "../../globals/cloud-entity-detail.slint";
 import { CloudTrackActions } from "../../globals/cloud-track-actions.slint";
-import { Nav, NavEnterFrom } from "../../globals/nav.slint";
+import { Nav } from "../../globals/nav.slint";
 import { ActionPill, PillButton } from "../../components/action-pill.slint";
 import { LibraryTabBand } from "../../components/hero/library-tab-band.slint";
 import { ViewTransition } from "../../components/view-transition.slint";
@@ -16,14 +16,21 @@ export component CloudEntityDetailView inherits Rectangle {
     private property <bool> expanded: false;
     private property <bool> watched-open: CloudEntityDetail.open;
     // Own the latch even when returning from the miniplayer with a detail already open.
-    init => { root.content-mounted = CloudEntityDetail.open; }
+    init => {
+        root.content-mounted = CloudEntityDetail.open;
+        opening.running = CloudEntityDetail.open;
+    }
     changed watched-open => {
+        opening.running = false;
         if (root.watched-open) {
             if (root.content-mounted) {
                 // Reverse an in-flight collapse and cancel the band's pending teardown.
                 root.expanded = true;
             } else {
+                root.expanded = false;
                 root.content-mounted = true;
+                opening.running = true;
+                opening.restart();
             }
         } else {
             if (root.expanded) {
@@ -32,6 +39,18 @@ export component CloudEntityDetailView inherits Rectangle {
                 // Back can arrive before the opening frame's timer has fired.
                 root.finish-close();
             }
+        }
+    }
+
+    // This timer belongs to the retained controller and is explicitly rearmed on every open.
+    // A timer inside the conditional content keeps its stopped state after the first close.
+    // Wait for a compact frame before asking the shared band to expand.
+    opening := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.expanded = CloudEntityDetail.open;
         }
     }
 
@@ -44,20 +63,14 @@ export component CloudEntityDetailView inherits Rectangle {
 
     visible: root.content-mounted && !Nav.now-playing-open;
 
-    if root.content-mounted: Rectangle {
+    // Keep the band alive with its controller. Recreating it after the opening timer fires
+    // seeds its hero progress at the final value and skips the expansion on later visits.
+    Rectangle {
         width: 100%;
         height: 100%;
-
-        // This timer mounts with the band, so the compact state gets a first frame. `init`
-        // would seed the band at its final height and skip the expansion entirely.
-        Timer {
-            interval: 1ms;
-            running: true;
-            triggered => {
-                self.running = false;
-                root.expanded = CloudEntityDetail.open;
-            }
-        }
+        // The source remains mounted to preserve its scroll position. Cover it even while a
+        // child fades, otherwise its header and rows flash through the arriving detail.
+        background: CloudEntityDetail.open ? Theme.base : transparent;
 
         // Covers gaps between controls while the overlay is entering or returning.
         TouchArea { }
@@ -101,16 +114,10 @@ export component CloudEntityDetailView inherits Rectangle {
                 vertical-stretch: 1;
                 clip: true;
 
-                // The band supplies the travel; only the list fades while it is moving. An exact
-                // entity replacement or a late response replays this body without flashing the hero.
-                if CloudEntityDetail.open: ViewTransition {
+                if CloudEntityDetail.open: Rectangle {
                     width: 100%;
                     height: 100%;
                     background: Theme.base;
-                    enter-from: NavEnterFrom.above;
-                    slide: root.expanded && !band.morphing;
-                    replay-key: CloudEntityDetail.kind + ":" + CloudEntityDetail.remote-id
-                        + (CloudEntityDetail.loading ? ":loading" : ":ready");
 
                     VerticalLayout {
                         if CloudEntityDetail.kind == "album" && CloudEntityDetail.album-favorite-error != "": HorizontalLayout {
@@ -136,20 +143,29 @@ export component CloudEntityDetailView inherits Rectangle {
                         Rectangle {
                             vertical-stretch: 1;
 
-                            if !CloudEntityDetail.loading && CloudEntityDetail.error == "": CloudPlaylistTracks {
+                            // Mount the reveal with the ready list, not its loading placeholder.
+                            // The band owns all vertical travel throughout its morph.
+                            if !CloudEntityDetail.loading && CloudEntityDetail.error == "": ViewTransition {
                                 width: 100%;
                                 height: 100%;
-                                rows: CloudEntityDetail.tracks;
-                                columns <=> Favorites.track-columns;
-                                sort-field: "position";
-                                sort-dir: "asc";
-                                position-field: "position";
-                                show-number: true;
-                                favorite-clickable: true;
-                                sortable: false;
-                                cloud-entity-links: true;
-                                play-track(id, index) => { CloudEntityDetail.play-cloud-row(id, index); }
-                                toggle-favorite(id, liked) => { CloudTrackActions.toggle-favorite(id, liked); }
+                                slide: false;
+                                replay-key: CloudEntityDetail.kind + ":" + CloudEntityDetail.remote-id;
+
+                                CloudPlaylistTracks {
+                                    width: 100%;
+                                    height: 100%;
+                                    rows: CloudEntityDetail.tracks;
+                                    columns <=> Favorites.track-columns;
+                                    sort-field: "position";
+                                    sort-dir: "asc";
+                                    position-field: "position";
+                                    show-number: true;
+                                    favorite-clickable: true;
+                                    sortable: false;
+                                    cloud-entity-links: true;
+                                    play-track(id, index) => { CloudEntityDetail.play-cloud-row(id, index); }
+                                    toggle-favorite(id, liked) => { CloudTrackActions.toggle-favorite(id, liked); }
+                                }
                             }
 
                             if CloudEntityDetail.loading: Text {
