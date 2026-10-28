@@ -20,6 +20,8 @@ export global CloudEntityDetail {
     in-out property <string> album-favorite-error;
 
     callback close();
+    // Release the outgoing content after the shared header's collapse, guarded against a re-open.
+    callback closed();
     callback retry();
     callback play-cloud-row(string /*song ID*/, int /*index*/);
 }

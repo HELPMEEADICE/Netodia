@@ -576,7 +576,7 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     );
 
     assert!(
-        code.contains("HeroChipStrip { fade: root.hero-t; }"),
+        code.contains("HeroChipStrip { fade: root.hero-t; show-rows: root.chips-shown; }"),
         "the chip strip fades through its own `fade` input, on the same clock — it cannot take an \
          `opacity` and it cannot be unmounted, so this is the only way it leaves with the title \
          above it"

@@ -35,6 +35,8 @@ export component HeroChipStrip inherits MetaChipStrip {
     vertical-stretch: 0;
 
     measured(w) => {
-        HeroChips.recompute(w);
+        if (root.show-rows) {
+            HeroChips.recompute(w);
+        }
     }
 }

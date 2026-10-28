@@ -131,13 +131,25 @@ fn wire_entity_detail_actions(ui: &AppWindow, state: &AppState) {
         if !detail.get_open() {
             return;
         }
-        // The same reveal as My Library's grid/detail swap, with the source still mounted so
-        // its filter and scroll position survive the visit.
+        // Reveal the retained source while the shared header collapses. Its outgoing facts must
+        // survive until `closed`, just like My Library's hero-collapsed teardown.
         detail.set_return_tick(detail.get_return_tick().wrapping_add(1));
         detail.set_open(false);
+    });
+
+    let weak = ui.as_weak();
+    ui.global::<CloudEntityDetail>().on_closed(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let detail = ui.global::<CloudEntityDetail>();
+        if detail.get_open() {
+            return;
+        }
         detail.set_loading(false);
         detail.set_error(SharedString::default());
         detail.set_tracks(empty_track_model());
+        detail.set_title(SharedString::default());
+        detail.set_subtitle(SharedString::default());
+        detail.set_artwork_path(SharedString::default());
     });
 
     let weak = ui.as_weak();

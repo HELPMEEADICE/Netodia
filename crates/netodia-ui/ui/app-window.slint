@@ -606,16 +606,11 @@ export component AppWindow inherits Window {
                     // Cloud album and artist pages sit over whichever view launched them. The
                     // current section stays mounted underneath, so Back returns to its exact scroll
                     // position and filter state.
-                    // My Library's playlist body uses this same fade while its band morphs.
-                    // Back replays the retained source page above instead of running a second
-                    // exit animation over it.
-                    if CloudEntityDetail.open && !Nav.now-playing-open: ViewTransition {
+                    // Keep the controller alive so its shared LibraryTabBand can finish collapsing.
+                    // It owns the header morph and the list-only reveal, just like My Library.
+                    CloudEntityDetailView {
                         width: 100%;
                         height: 100%;
-                        slide: false;
-                        replay-key: CloudEntityDetail.kind + ":" + CloudEntityDetail.remote-id
-                            + (CloudEntityDetail.loading ? ":loading" : ":ready");
-                        CloudEntityDetailView { width: 100%; height: 100%; }
                     }
 
                     // Inside the content panel so its backdrop and slide stay off the sidebar

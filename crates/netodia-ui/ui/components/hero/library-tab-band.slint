@@ -43,6 +43,8 @@ export component LibraryTabBand inherits Rectangle {
     // on a row of their own, which is what leaves the band slack for a wrapped second chip row.
     in property <string> subtitle;
     in property <bool> title-badge;
+    // Overlays share the morph without borrowing the retained source page's metadata.
+    in property <bool> chips-shown: true;
 
     in property <string> artwork-path;
     in property <image> cover;
@@ -119,6 +121,7 @@ export component LibraryTabBand inherits Rectangle {
     // **`hero-t > 0` is the wrong spelling**: it is `0` on a drill-in's first frame, the one frame
     // the answer must be `true`.
     out property <bool> morphing: root.hero-t != (root.detail-open ? 1.0 : 0.0);
+    out property <float> progress: root.hero-t;
 
     // --- The bar's palette ---------------------------------------------------
     //
@@ -415,7 +418,7 @@ export component LibraryTabBand inherits Rectangle {
 
                 // The rows live on a global six heroes share, so what empties the strip is the
                 // collapse's teardown rather than an `if` — which this couldn't be anyway.
-                HeroChipStrip { fade: root.hero-t; }
+                HeroChipStrip { fade: root.hero-t; show-rows: root.chips-shown; }
 
                 Rectangle { vertical-stretch: 1; }
             }
