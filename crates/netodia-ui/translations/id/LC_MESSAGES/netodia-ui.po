@@ -2012,10 +2012,6 @@ msgstr "Lagu serupa"
 msgid "Now Playing"
 msgstr "Sedang diputar"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Hentikan"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Lagu"

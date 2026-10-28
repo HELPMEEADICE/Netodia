@@ -13,11 +13,10 @@
 //!   kanji as Mandarin: 世界 comes back `shijie` where the sheet wants `sekai`. Kana is the only
 //!   thing that tells kanji from hanzi, and a line can carry none while its sheet does, which is
 //!   why [`apply`] takes the whole sheet and settles the question once for all of it.
+//!   Outside a Japanese sheet, Han stays as written: Chinese gets no automatic pinyin.
 //!
-//! **A Latin sheet costs one `is_ascii` pass and no engine call.** The rest runs inside the
-//! resolver's `spawn_blocking`, once per track change, so nothing here is on the UI thread. What
-//! it produces is stored per line and filtered at draw time, which is what makes the toggle
-//! instant.
+//! Existing readings belong to the source and are kept for the whole sheet. Automatic readings
+//! are generated on a blocking thread only while their display is enabled, then kept per line.
 
 mod hangul;
 mod japanese;
@@ -38,16 +37,23 @@ const HOMOGLYPHS: [char; 32] = [
     'К', 'М', 'Н', 'О', 'Р', 'С', 'Т', 'У', 'Х', 'І', 'Ј', 'Ѕ', 'Ԁ',
 ];
 
-/// Fill in each line's romanization, where its script wants one.
+/// Whether the sheet lacks supplied readings and has a script we should sound out.
+pub(super) fn needs_generation(lines: &[LyricLine]) -> bool {
+    !lines
+        .iter()
+        .any(|line| line.romanization.as_deref().is_some_and(|reading| !reading.trim().is_empty()))
+        && lines
+            .iter()
+            .any(|line| needs_romanization(&line.text, false) && !is_latin_in_disguise(&line.text))
+}
+
+/// Fill in automatic readings only when the sheet has none of its own.
 ///
 /// Takes the sheet rather than a line because whether its Han characters are Japanese is a
 /// question about the sheet: kana is the only evidence, and the line carrying it need not be the
 /// line being romanized.
 pub(super) fn apply(lines: &mut [LyricLine]) {
-    // The resolver asks this too, to decide whether the sheet is worth the trip to the blocking
-    // pool, so in production it is answered before the hop. Kept for a direct caller: past it
-    // every line walks kakasi's sniffer.
-    if lines.iter().all(|line| line.text.is_ascii()) {
+    if !needs_generation(lines) {
         return;
     }
 
@@ -62,7 +68,7 @@ pub(super) fn apply(lines: &mut [LyricLine]) {
 /// The equality at the end is the second net under [`needs_romanization`]: a line an engine hands
 /// back unchanged has nothing to say, and drawing it twice is worse than not drawing it.
 fn romanize_line(line: &str, sheet_is_japanese: bool) -> Option<String> {
-    if !needs_romanization(line) || is_latin_in_disguise(line) {
+    if !needs_romanization(line, sheet_is_japanese) || is_latin_in_disguise(line) {
         return None;
     }
 
@@ -77,13 +83,14 @@ fn romanize_line(line: &str, sheet_is_japanese: bool) -> Option<String> {
 /// stale each Unicode release. `Common` and `Inherited` are punctuation, digits and combining
 /// marks, and `Unknown` is a codepoint nothing can read, so an accented Latin line answers `false`
 /// and grows no pointless `Como` under its `Cómo`.
-fn needs_romanization(line: &str) -> bool {
+///
+/// Han only needs a reading when the sheet provides evidence that it is Japanese.
+fn needs_romanization(line: &str, sheet_is_japanese: bool) -> bool {
     !line.is_ascii()
-        && line.chars().any(|letter| {
-            !matches!(
-                letter.script(),
-                Script::Latin | Script::Common | Script::Inherited | Script::Unknown
-            )
+        && line.chars().any(|letter| match letter.script() {
+            Script::Latin | Script::Common | Script::Inherited | Script::Unknown => false,
+            Script::Han => sheet_is_japanese,
+            _ => true,
         })
 }
 
@@ -106,7 +113,7 @@ fn is_latin_in_disguise(line: &str) -> bool {
     ascii && disguised
 }
 
-/// Everything that is not a Japanese sheet: our Hangul, and uroman for the rest.
+/// Everything that is not a Japanese sheet: our Hangul, Han as written, and uroman for the rest.
 ///
 /// Split into runs rather than handed over whole because Hangul is the one script here with a
 /// better answer than uroman's. Splitting costs uroman no context: what separates two Hangul runs
@@ -149,29 +156,31 @@ fn push_between_hangul(run: &str, out: &mut String) {
     push_uroman(run, out);
 }
 
-/// uroman over one run, with a stretch of Han spaced a syllable at a time.
-///
-/// Chinese writes no spaces, so uroman joins a whole run of Han into one word and a line of it
-/// comes back as an unreadable blob. The `Edges` format is the same answer carrying each piece's
-/// source span, which is what lets the syllables be split apart without a second pass over the
-/// text or a second engine to do it with.
+/// uroman over one run, leaving Chinese spans as written even in mixed-script lyrics.
 ///
 /// Deliberately no language hint. uroman takes an ISO 639-3 code and carries rules for twenty-odd
 /// of them, but nothing upstream of here knows what language a sheet is in, and a wrong hint is
 /// worse than none.
 fn push_uroman(run: &str, out: &mut String) {
-    // A handle over a process-wide archive rather than a construction; the crate documents it as
-    // free, and threading one through would read as though it were not.
-    let edges = Uroman::new().romanize_string::<rom_format::Edges>(run, None).to_edges();
-    let letters: Vec<char> = run.chars().collect();
-
-    let mut previous_ended_in_han = false;
-    for edge in &edges {
-        if previous_ended_in_han && is_han_at(&letters, edge.start()) {
-            out.push(' ');
+    let mut rest = run;
+    while !rest.is_empty() {
+        let han_at = rest.find(|letter: char| letter.script() == Script::Han);
+        let (before, from_han) = rest.split_at(han_at.unwrap_or(rest.len()));
+        if needs_romanization(before, false) {
+            out.push_str(
+                &Uroman::new().romanize_string::<rom_format::Str>(before, None).to_string(),
+            );
+        } else {
+            out.push_str(before);
         }
-        out.push_str(edge.txt());
-        previous_ended_in_han = edge.end().checked_sub(1).is_some_and(|at| is_han_at(&letters, at));
+        if from_han.is_empty() {
+            break;
+        }
+        let run_len =
+            from_han.find(|letter: char| letter.script() != Script::Han).unwrap_or(from_han.len());
+        let (han, after) = from_han.split_at(run_len);
+        out.push_str(han);
+        rest = after;
     }
 }
 

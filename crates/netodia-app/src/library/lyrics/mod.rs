@@ -42,7 +42,7 @@ use std::sync::Arc;
 
 use crate::state::AppState;
 use netodia_core::config::Paths;
-use netodia_core::entities::lyrics::{Lyrics, LyricsOutcome};
+use netodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsOutcome};
 use netodia_core::entities::tags::{FieldEdit, TagEdit};
 use netodia_core::entities::track::TrackSummary;
 use netodia_core::error::AppError;
@@ -83,30 +83,34 @@ fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
 
 /// The romanization drawn under each line, filled in off the UI thread.
 ///
-/// **Here rather than in [`resolve`] because four arms answer it and one of them is the network's,
-/// so romanizing where a sheet is chosen would be four call sites for one question.** Filled
-/// whatever the panel's toggle says: the toggle is a display filter, and doing this lazily would
-/// put the pass on the thread that draws.
-///
-/// The `is_ascii` walk pays for the hop rather than the other way round. Most libraries are Latin
-/// throughout, and a sheet with nothing to romanize should not cost a trip to the blocking pool.
+/// All sources share the same reading policy, including the cloud lookup outside [`resolve`].
 async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOutcome, AppError> {
     let LyricsOutcome::Sheet(mut sheet) = outcome else {
         return Ok(outcome);
     };
-    if sheet.lines.iter().all(|line| line.text.is_ascii()) {
-        return Ok(LyricsOutcome::Sheet(sheet));
-    }
+    sheet.lines = add_readings(state, sheet.lines).await?;
+    Ok(LyricsOutcome::Sheet(sheet))
+}
 
-    let sheet = state
+/// Preserve supplied readings; otherwise generate them only while reading display is enabled.
+///
+/// Also used when the display is enabled for a resident sheet, without another file or network
+/// lookup. The engines always run on the blocking pool, including that toggle path.
+pub async fn add_readings(
+    state: &AppState,
+    mut lines: Vec<LyricLine>,
+) -> Result<Vec<LyricLine>, AppError> {
+    if !state.lyrics_romanization_shown.get() || !romanize::needs_generation(&lines) {
+        return Ok(lines);
+    }
+    state
         .runtime
         .spawn_blocking(move || {
-            romanize::apply(&mut sheet.lines);
-            sheet
+            romanize::apply(&mut lines);
+            lines
         })
         .await
-        .map_err(AppError::io_source)?;
-    Ok(LyricsOutcome::Sheet(sheet))
+        .map_err(AppError::io_source)
 }
 
 /// Which of the four sources answers for this track.

@@ -8,7 +8,7 @@
 use super::detail::{POSITION_FIELD, is_manual_order, sort_playlist_tracks};
 use super::*;
 use netodia_core::entities::track::TrackListRow;
-use netodia_testkit::code_tokens;
+use netodia_testkit::{block_after, code_tokens};
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../netodia-ui/ui/components/track-list/draggable-track-list.slint");
@@ -26,6 +26,29 @@ const PLAYLIST_GRID: &str =
 const PLAYLIST_DETAIL_GLOBAL: &str =
     include_str!("../../../../../netodia-ui/ui/globals/playlists.slint");
 const GRID_CALLBACKS: &str = include_str!("../callbacks/grid.rs");
+const ENTRY_CARD: &str =
+    include_str!("../../../../../netodia-ui/ui/views/my-library/entry-card.slint");
+
+/// Entry cards start a list with a click; retaining keyboard focus would turn the next Space
+/// into another activation instead of the shared transport toggle.
+#[test]
+fn entry_cards_leave_keyboard_shortcuts_with_the_shared_transport() {
+    let src = code_tokens(ENTRY_CARD);
+    assert!(!src.contains("FocusScope"));
+    assert!(!src.contains("forward-focus:"));
+    assert!(!src.contains("key-pressed("));
+    let touch = block_after(&src, "touch := TouchArea");
+    let clicked = block_after(touch, "clicked =>");
+    assert!(clicked.contains("root.activated();"));
+    let accessible = block_after(&src, "accessible-action-default =>");
+    assert!(accessible.contains("root.activated();"));
+
+    let shortcuts =
+        code_tokens(include_str!("../../../../../netodia-ui/ui/layout/shortcut-scope.slint"));
+    let space = block_after(&shortcuts, "if (ev.text == \" \")");
+    assert!(space.contains("Player.play-pause();"));
+    assert!(space.contains("return accept;"));
+}
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.

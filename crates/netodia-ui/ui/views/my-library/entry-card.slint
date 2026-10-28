@@ -49,12 +49,8 @@ export component LibraryEntryCard inherits Rectangle {
             }
         }
     }
-    touch := TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
-    focus := FocusScope {
-        key-pressed(event) => {
-            if (event.text == " " || event.text == "\n") { root.activated(); return accept; }
-            return reject;
-        }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
     }
-    forward-focus: focus;
 }

@@ -32,11 +32,10 @@ export component LyricsPanel inherits Rectangle {
     in property <bool> bar-on-backdrop: true;
     in property <duration> bar-recolor-duration: Theme.dur-fast;
 
-    // How far the panel closes on the target each tick. A quarter settles inside a third of a
-    // second at this interval, which reads as a glide rather than a snap or a drift.
-    property <float> follow-step: 0.25;
+    // At 16ms, 0.13 keeps the previous 0.25-at-33ms glide speed with twice as many steps.
+    property <float> follow-step: 0.13;
 
-    // How long the panel leaves the reader alone after they scroll it themselves, in ticks.
+    // How long the panel leaves the reader alone after they scroll it themselves, in 33ms ticks.
     // Measured from the *last* scroll rather than the first, since paging back through a verse is
     // one gesture made of many events and being yanked forward mid-way is the failure.
     property <int> suspend-ticks-total: 120;
@@ -263,18 +262,12 @@ export component LyricsPanel inherits Rectangle {
     // Starts false: the panel mounts at the top of a sheet it has not caught up with.
     property <bool> settled;
 
-    // **One timer on two cadences**, the visualizer strip's `dormant ? 500ms : 33ms` shape. It
-    // exists only while this branch is mounted, which is what keeps all of it off every other
-    // view, and it drops to a crawl once the song and the scroll are both still. The slow cadence
-    // still runs because the width has to reach Rust and has to survive a window resize, and a
-    // `changed` handler on a layout property is the one thing this component may not carry.
-    //
-    // **The catch-up half earns the fast cadence as much as the transport does**: a paused song
-    // never moves the target, but a panel that has just mounted, or that a reader has scrolled
-    // away from, is nowhere near it, and a quarter of the distance per *second* is a crawl. The
-    // `has-rows` term is what keeps a panel with nothing to draw on the slow one.
+    // Position tracking and width polling keep their 33ms cadence. Only the scroll timer below
+    // runs at 16ms, so smoother motion does not double Rust callbacks or layout measurements.
+    // Polling drops to 1s once playback, scrolling and the reader's suspension are all still.
     Timer {
-        interval: root.following || (root.has-rows && !root.settled) ? 33ms : 1s;
+        interval: root.following
+            || (root.has-rows && (!root.settled || root.suspend-ticks > 0)) ? 33ms : 1s;
         running: true;
         triggered => {
             Lyrics.report-width(
@@ -290,6 +283,7 @@ export component LyricsPanel inherits Rectangle {
             // A plain sheet, or the run-in before the first stamp: nothing to centre on, and the
             // reader owns the scroll in both.
             if (Lyrics.active-index < 0) {
+                root.suspend-ticks = 0;
                 root.settled = true;
                 return;
             }
@@ -304,12 +298,25 @@ export component LyricsPanel inherits Rectangle {
                 // Keep the eased position with the reader, so resuming glides from where they
                 // left the panel rather than from where the song was.
                 root.scroll-y = -sv.viewport-y;
-            } else if (abs(root.target-y - root.scroll-y) > 1px) {
-                // **Gated, because the step is geometric and so never arrives.** The sub-pixel
-                // tail wrote `viewport-y` on every tick of the fast cadence, and FemtoVG has no
-                // partial rendering, so each write repainted the whole window. The threshold is
-                // `settled`'s own, spelled again rather than read off it: that flag is last
-                // tick's answer, and the target has just moved on the tick that matters.
+            }
+            root.settled = abs(root.target-y - root.scroll-y) <= 1px;
+        }
+    }
+
+    // Only viewport movement runs at about 60fps. Stop at the pixel threshold: a geometric
+    // sub-pixel tail would otherwise keep FemtoVG repainting the whole window indefinitely.
+    Timer {
+        interval: 16ms;
+        running: root.has-rows && !root.settled && root.suspend-ticks == 0;
+        triggered => {
+            if (Lyrics.active-index < 0) {
+                root.settled = true;
+                return;
+            }
+            if (bar.dragging) {
+                return;
+            }
+            if (abs(root.target-y - root.scroll-y) > 1px) {
                 root.scroll-y += (root.target-y - root.scroll-y) * root.follow-step;
                 sv.viewport-y = -root.scroll-y;
             }

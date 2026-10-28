@@ -48,3 +48,8 @@ rather than resolving them again.
 
 This ADR was written in September 2026 from the lyrics working doc, deleted when that feature
 shipped.
+
+**Amended, 2026-10-27:** Supplied readings take priority for the whole sheet. Only a sheet without
+them is eligible for automatic readings, and generation now follows the reading-display toggle.
+Enabling it supplements the resident sheet on the blocking pool without another lookup; disabling
+it hides any readings already in hand. Chinese no longer receives automatically generated pinyin.

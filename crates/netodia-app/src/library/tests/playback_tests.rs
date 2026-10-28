@@ -203,12 +203,12 @@ async fn each_transport_door_reaches_the_builder_it_names() -> Result<(), AppErr
     player_set_playback_speed(&fx.ctx, 1.5)?;
     assert!((lock_state(&fx.ctx.player_state).playback_speed - 1.5).abs() < f64::EPSILON);
 
-    // Past the restart threshold, so previous restarts the track rather than stepping back.
+    // Previous steps back even after seeking well into the current track.
     player_previous(&fx.ctx)?;
     {
         let state = lock_state(&fx.ctx.player_state);
         assert_eq!(state.position_ms, 0);
-        assert_eq!(state.current_track().map(|t| t.id), ids.get(1).copied());
+        assert_eq!(state.current_track().map(|t| t.id), ids.first().copied());
     }
 
     player_stop(&fx.ctx)?;

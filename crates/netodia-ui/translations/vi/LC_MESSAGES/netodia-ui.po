@@ -2012,10 +2012,6 @@ msgstr "Bài hát tương tự"
 msgid "Now Playing"
 msgstr "Đang phát"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Dừng"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Bản nhạc"
