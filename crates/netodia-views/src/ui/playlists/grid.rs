@@ -25,7 +25,7 @@ use netodia_ui::{
 };
 
 // Bound recommendation staleness while ordinary tab switches stay entirely in memory.
-pub(super) const CATEGORY_CACHE_TTL: Duration = Duration::from_secs(300);
+pub(super) const CATEGORY_CACHE_TTL: Duration = Duration::from_mins(5);
 
 /// Paint the category's last successful snapshot before starting any background refresh.
 /// Returns whether it is fresh enough to skip the request. UI thread only.

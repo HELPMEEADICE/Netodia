@@ -84,14 +84,19 @@ fn switching_categories_restores_each_snapshot_without_releasing_it_on_leave() {
 }
 
 #[test]
-fn expired_categories_still_paint_their_snapshot_but_require_refresh() {
+fn expired_categories_still_paint_their_snapshot_but_require_refresh()
+-> Result<(), Box<dyn std::error::Error>> {
     let ui = cached_categories();
+    let expired = std::time::Instant::now()
+        .checked_sub(grid::CATEGORY_CACHE_TTL)
+        .ok_or("monotonic clock cannot represent the expired cache timestamp")?;
     if let Some(cached) = ui.grid.categories.lock().get_mut(&0) {
-        cached.fetched_at = std::time::Instant::now() - grid::CATEGORY_CACHE_TTL;
+        cached.fetched_at = expired;
     }
 
     assert!(!ui.restore_category(7));
     assert_eq!(ui.grid_stats_by_id(1).map(|row| row.track_count), Some(2));
+    Ok(())
 }
 
 #[test]

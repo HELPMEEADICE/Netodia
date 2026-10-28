@@ -58,7 +58,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     }) {
                         log::warn!("library category persistence: {}", describe(&error));
                     }
-                })
+                });
             })
             .await;
             if let Err(error) = saved {
