@@ -1,7 +1,7 @@
 //! What the romanizer owns, and what it only passes through.
 //!
 //! **Goldens are pinned for the parts written here and not for the parts uroman answers.** Hangul,
-//! the Japanese pipeline and the Han spacing are this module's, so a change to any of them should
+//! the Japanese pipeline and the exclusion of Chinese are this module's, so a change to them should
 //! fail a test. Cyrillic, Greek, Arabic and the rest are uroman's spelling, and pinning it would
 //! make an upstream bump look like a regression here; those are checked for the properties the
 //! panel actually depends on instead.
@@ -135,18 +135,62 @@ fn the_sheet_decides_whether_its_kanji_are_japanese() {
     assert_eq!(japanese.first().and_then(Option::as_deref), Some("sekai"));
 
     let chinese = romanized(&["世界", "我爱你"]);
-    assert_eq!(chinese.first().and_then(Option::as_deref), Some("shi jie"));
+    assert_eq!(chinese, [None, None]);
 }
 
-/// Chinese writes no spaces, so uroman returns one word for a whole line and the syllables are
-/// split back apart off the source spans.
 #[test]
-fn han_is_spaced_one_syllable_at_a_time() {
-    assert_eq!(one("我爱你").as_deref(), Some("wo ai ni"));
-    assert_eq!(
-        one("加拿大在一万四千年前即有原住民在此生活。").as_deref(),
-        Some("jia na da zai 14000 nian qian ji you yuan zhu min zai ci sheng huo.")
-    );
+fn chinese_lyrics_and_credits_get_no_automatic_pinyin() {
+    let answers = romanized(&[
+        "我爱你",
+        "詞曲 Songwriting: 蘇紫旭",
+        "作词 : 苏紫旭&The Paramecia",
+        "演唱 Vocal: 苏紫旭",
+        "原声吉他 Acoustic Guitar: 苏紫旭",
+    ]);
+    assert_eq!(answers, [None, None, None, None, None]);
+}
+
+#[test]
+fn chinese_stays_written_beside_other_scripts() -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(one("사랑 我爱你 밤").as_deref(), Some("sarang 我爱你 bam"));
+    let mixed = one("我爱你 Привет 世界").ok_or("Cyrillic should still get a reading")?;
+    assert!(mixed.starts_with("我爱你 "));
+    assert!(mixed.ends_with(" 世界"));
+    assert!(!mixed.contains("Привет"));
+    Ok(())
+}
+
+#[test]
+fn supplied_readings_are_preserved_even_for_chinese() {
+    let mut lines = sheet(&["我爱你"]);
+    lines[0].romanization = Some("wo ai ni".to_owned());
+
+    apply(&mut lines);
+
+    assert_eq!(lines[0].romanization.as_deref(), Some("wo ai ni"));
+}
+
+#[test]
+fn supplied_readings_take_priority_over_automatic_readings_for_the_whole_sheet() {
+    let mut lines = sheet(&["こんにちは", "世界"]);
+    lines[0].romanization = Some("Konnichiwa (provided)".to_owned());
+
+    apply(&mut lines);
+
+    assert_eq!(lines[0].romanization.as_deref(), Some("Konnichiwa (provided)"));
+    assert_eq!(lines[1].romanization, None);
+}
+
+#[test]
+fn blank_supplied_readings_allow_automatic_readings() {
+    let mut lines = sheet(&["사랑", "밤"]);
+    lines[0].romanization = Some(" \t".to_owned());
+    lines[1].romanization = Some(String::new());
+
+    apply(&mut lines);
+
+    assert_eq!(lines[0].romanization.as_deref(), Some("sarang"));
+    assert_eq!(lines[1].romanization.as_deref(), Some("bam"));
 }
 
 /// uroman's own answer, so the assertion is what the panel depends on rather than the spelling.

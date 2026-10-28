@@ -1261,26 +1261,46 @@ fn next_while_paused_stays_paused_without_fading() {
 }
 
 #[test]
-fn previous_restarts_after_threshold() {
+fn previous_goes_back_even_after_playing_for_a_while() {
     let mut state = queued(3);
-    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
-    state.position_ms = RESTART_THRESHOLD_MS + 1;
+    state.queue.advance();
+    play_track_inner(&mut state, make_summary(2, "Track 2", 180_000), None);
+    state.position_ms = 45_000;
 
     let actions = state.build_previous_actions();
 
     assert_eq!(state.position_ms, 0);
-    assert_eq!(
-        actions,
-        vec![PlayerAction::Seek {
-            position_ms: 0,
-            file_path: "/music/1.mp3".to_owned(),
-            replaygain: TrackReplayGain::default(),
-        }]
+    assert_eq!(state.current_track().map(|track| track.id), Some(1));
+    assert_eq!(state.queue.current_index, Some(0));
+    assert!(matches!(actions.as_slice(), [PlayerAction::PlayMedia { .. }]));
+}
+
+#[test]
+fn previous_switches_cloud_songs_while_paused_regardless_of_position() {
+    let mut state = PlayerState::default();
+    let mut previous = make_summary(1, "Previous cloud song", 180_000);
+    Arc::make_mut(&mut previous).file_path.clear();
+    let mut cloud = make_summary(2, "Current cloud song", 180_000);
+    Arc::make_mut(&mut cloud).file_path.clear();
+    state.queue.add_tracks(vec![previous, cloud.clone()]);
+    state.queue.current_index = Some(1);
+    play_track_inner(&mut state, cloud, None);
+    state.position_ms = 45_000;
+    state.status = PlaybackStatus::Paused;
+
+    let actions = state.build_previous_actions();
+
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.status, PlaybackStatus::Paused);
+    assert_eq!(state.current_track().map(|track| track.id), Some(1));
+    assert_eq!(state.queue.current_index, Some(0));
+    assert!(
+        matches!(&actions[..], [PlayerAction::PlayMedia { file_path, start_position_ms: None, .. }, PlayerAction::Pause { fade_ms: 0 }] if file_path.is_empty())
     );
 }
 
 #[test]
-fn previous_goes_back_under_threshold() {
+fn previous_goes_back_near_the_start() {
     let mut state = queued(3);
     play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
     state.queue.advance();
@@ -1289,7 +1309,7 @@ fn previous_goes_back_under_threshold() {
 
     let actions = state.build_previous_actions();
 
-    assert_eq!(state.current_track().map(|t| t.id), Some(1), "under the threshold it steps back");
+    assert_eq!(state.current_track().map(|t| t.id), Some(1));
     assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
 }
 

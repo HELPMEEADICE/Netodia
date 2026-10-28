@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use netodia_core::entities::cloud::RoamingMode;
-use netodia_core::error::{AppError, AppResult};
+use netodia_core::error::AppResult;
 use netodia_engine::player::engine::queue::QueueState;
 use netodia_engine::player::engine::state::{lock_state, with_state_emit};
 use netodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
@@ -54,18 +54,14 @@ async fn run_inner(
     {
         return Ok(());
     }
-    let ids: Vec<i64> = songs.iter().map(|song| song.id).collect();
-    let first =
-        *ids.first().ok_or_else(|| AppError::Queue("暂时没有可播放的漫游歌曲".to_owned()))?;
-    let (volume, speed) = {
-        let player = lock_state(&state.player_state);
-        (player.effective_volume(), player.playback_speed)
-    };
-    let result = state.cloud_playback.play_queue(&ids, first, false, volume, speed).await?;
+    let result = state
+        .cloud_playback
+        .play_roaming_queue(songs, request.queue_generation, request.playback_generation)
+        .await?;
     if !result.started {
         return Ok(());
     }
-    let generation = request.queue_generation.wrapping_add(1);
+    let generation = request.queue_generation;
     if state.cloud_playback.queue_generation() != generation {
         return Ok(());
     }

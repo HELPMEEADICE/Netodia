@@ -2016,10 +2016,6 @@ msgstr "Παρόμοια τραγούδια"
 msgid "Now Playing"
 msgstr "Τώρα παίζει"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Διακοπή"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Κομμάτια"

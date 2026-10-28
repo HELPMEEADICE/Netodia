@@ -136,8 +136,7 @@ fn wire_roaming(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
         playlists.set_roaming_mode(index);
         playlists.set_roaming_loading(true);
         playlists.set_roaming_error(slint::SharedString::default());
-        let queue_generation = s.cloud_playback.queue_generation();
-        let playback_generation = s.engine.reserve_playback_request();
+        let (queue_generation, playback_generation) = s.cloud_playback.reserve_roaming_playback();
         let s = s.clone();
         let pu = pu.clone();
         let weak = weak.clone();
@@ -168,12 +167,5 @@ fn wire_roaming(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
                 }
             });
         });
-    });
-
-    let pu = playlists_ui.clone();
-    let s = state.clone();
-    ui.global::<Playlists>().on_stop_roaming(move || {
-        pu.roaming_cancel.lock().cancel();
-        s.engine.stop();
     });
 }

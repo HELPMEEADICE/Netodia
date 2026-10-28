@@ -2032,10 +2032,6 @@ msgstr "Похожие песни"
 msgid "Now Playing"
 msgstr "Сейчас играет"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Остановить"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Треки"

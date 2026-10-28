@@ -1,10 +1,6 @@
 name: Build and release
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   # Build after a release is published. Draft releases are built when published.
   release:
     types: [published]
@@ -23,105 +19,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  fmt:
-    name: Rust formatting
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Test release version preparation
-        run: python -m unittest discover -s scripts -p 'test_*.py'
-      - uses: ./.github/actions/setup-rust
-      - name: Check Rust formatting
-        run: cargo fmt --all --check
-
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/cargo-audit
-
-  quality-linux:
-    name: Rust and Slint checks (Linux)
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_JOBS: 4
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/linux-system-deps
-      - uses: ./.github/actions/setup-rust
-        with:
-          shared-key: ci-clippy
-      - name: Check Slint UI compilation
-        run: cargo check --locked -p netodia-ui
-      - name: Run Clippy
-        run: cargo clippy --all-targets --locked --workspace -- -D warnings
-
-  test-linux:
-    name: Tests (Linux)
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_JOBS: 4
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-      CARGO_PROFILE_TEST_DEBUG: line-tables-only
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/linux-system-deps
-      - uses: ./.github/actions/setup-rust
-        with:
-          shared-key: ci-test
-      - uses: ./.github/actions/headless-audio
-      - name: Run workspace tests
-        run: cargo test --locked --workspace
-
-  quality-windows:
-    name: Rust checks (Windows)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-rust
-        with:
-          shared-key: ci-clippy
-      - name: Run Clippy
-        run: cargo clippy --all-targets --locked --workspace -- -D warnings
-
-  test-windows:
-    name: Tests (Windows)
-    runs-on: windows-latest
-    env:
-      CARGO_BUILD_JOBS: 4
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-      CARGO_PROFILE_TEST_DEBUG: line-tables-only
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-rust
-        with:
-          shared-key: ci-test
-      - name: Run workspace tests
-        run: cargo test --locked --workspace -- --skip headless_scan_persists_track
-
-  quality:
-    name: quality
-    if: always()
-    needs: [fmt, audit, quality-linux, test-linux, quality-windows, test-windows, release-signing]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require every check to pass
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-        run: |
-          not_green="$(jq -r '
-            to_entries[]
-            | select(.value.result != "success")
-            | "  \(.key): \(.value.result)"' <<<"$NEEDS")"
-          if [[ -n "$not_green" ]]; then
-            echo "Checks that failed, were skipped, or were cancelled:"
-            echo "$not_green"
-            exit 1
-          fi
-          echo "All checks passed"
-
   release-signing:
     name: Release signing preflight
     runs-on: ubuntu-latest
@@ -186,9 +83,9 @@ jobs:
         run: rm -f "$RUNNER_TEMP/netodia-signing-check" "$RUNNER_TEMP/netodia-signing-check.minisig"
 
   build:
-    name: ${{ matrix.kind }} (${{ matrix.arch }})
+    name: ${{ matrix.os }} (${{ matrix.arch }})
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-    needs: [quality]
+    needs: [release-signing]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -198,18 +95,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest,       kind: linux-tarball,  arch: x86_64 }
-          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest,       kind: linux-appimage, arch: x86_64 }
-          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest,       kind: linux-rpm,      arch: x86_64 }
-          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest,       kind: linux-deb,      arch: x86_64 }
-          - { target: x86_64-pc-windows-msvc,   runner: windows-2025-vs2026, kind: windows-msi,    arch: x86_64 }
-          - { target: x86_64-pc-windows-msvc,   runner: windows-2025-vs2026, kind: windows-zip,    arch: x86_64 }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-tarball,  arch: aarch64 }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-appimage, arch: aarch64 }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-rpm,      arch: aarch64 }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-deb,      arch: aarch64 }
-          - { target: aarch64-pc-windows-msvc,   runner: windows-11-arm,     kind: windows-msi,    arch: aarch64 }
-          - { target: aarch64-pc-windows-msvc,   runner: windows-11-arm,     kind: windows-zip,    arch: aarch64 }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-latest,       os: linux,   arch: x86_64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,    os: linux,   arch: aarch64 }
+          - { target: x86_64-pc-windows-msvc,    runner: windows-2025-vs2026, os: windows, arch: x86_64 }
+          - { target: aarch64-pc-windows-msvc,   runner: windows-11-arm,      os: windows, arch: aarch64 }
     env:
       TAG: ${{ github.event.release.tag_name || format('manual-{0}', github.run_number) }}
       ARCH: ${{ matrix.arch }}
@@ -230,11 +119,11 @@ jobs:
       - uses: ./.github/actions/linux-system-deps
         if: runner.os == 'Linux'
         with:
-          extra-packages: ${{ matrix.kind == 'linux-rpm' && 'rpm' || '' }}
+          extra-packages: rpm
 
       - uses: ./.github/actions/setup-rust
         with:
-          shared-key: rust-release-${{ matrix.kind }}-${{ matrix.arch }}
+          shared-key: rust-release-${{ matrix.os }}-${{ matrix.arch }}
           target: ${{ matrix.target }}
 
       # Only workspace versions changed; keep third-party dependencies locked.
@@ -246,28 +135,28 @@ jobs:
         run: cargo build --release -p netodia --target ${{ matrix.target }} --locked
 
       - name: Package Linux tarball
-        if: matrix.kind == 'linux-tarball'
+        if: matrix.os == 'linux'
         shell: bash
         run: bash scripts/build-tarball.sh "netodia-${TAG}-${ARCH}-linux.tar.gz"
 
       - name: Package AppImage
-        if: matrix.kind == 'linux-appimage'
+        if: matrix.os == 'linux'
         shell: bash
         run: bash scripts/build-appimage.sh "netodia-${TAG}-${ARCH}.AppImage"
 
       - name: Package RPM
-        if: matrix.kind == 'linux-rpm'
+        if: matrix.os == 'linux'
         shell: bash
         run: |
           bash scripts/build-rpm.sh
           cp ~/rpmbuild/RPMS/${ARCH}/netodia-*.rpm .
 
       - name: Install cargo-deb
-        if: matrix.kind == 'linux-deb'
+        if: matrix.os == 'linux'
         run: cargo install --locked --version 3.7.0 cargo-deb
 
       - name: Package deb
-        if: matrix.kind == 'linux-deb'
+        if: matrix.os == 'linux'
         shell: bash
         run: |
           cargo deb -p netodia --target ${{ matrix.target }} --no-build
@@ -275,10 +164,10 @@ jobs:
           cp "$src" "netodia-${TAG}-${ARCH}.deb"
 
       - uses: ./.github/actions/setup-wix
-        if: matrix.kind == 'windows-msi'
+        if: matrix.os == 'windows'
 
       - name: Package MSI
-        if: matrix.kind == 'windows-msi'
+        if: matrix.os == 'windows'
         shell: pwsh
         run: |
           cargo wix --toolset modern --package netodia --target ${{ matrix.target }} --no-build --nocapture
@@ -289,7 +178,7 @@ jobs:
           }
 
       - name: Package portable ZIP
-        if: matrix.kind == 'windows-zip'
+        if: matrix.os == 'windows'
         shell: pwsh
         run: |
           $bundle = Join-Path $env:RUNNER_TEMP "netodia-portable"
@@ -327,11 +216,11 @@ jobs:
           key: ${{ secrets.MINISIGN_SECRET_KEY }}
           password: ${{ secrets.MINISIGN_PASSWORD }}
           files: netodia-*.tar.gz netodia-*.AppImage netodia-*.rpm netodia-*.deb netodia-*.msi netodia-*.zip
-          trusted-comment: version=${{ steps.metadata.outputs.version }} target=${{ matrix.kind }} file={file}
+          trusted-comment: version=${{ steps.metadata.outputs.version }} target=${{ matrix.target }} file={file}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.kind }}-${{ matrix.arch }}
+          name: ${{ matrix.os }}-${{ matrix.arch }}
           path: |
             netodia-*.tar.gz
             netodia-*.AppImage

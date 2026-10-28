@@ -2014,10 +2014,6 @@ msgstr "Brani simili"
 msgid "Now Playing"
 msgstr "In riproduzione"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Interrompi"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Brani"

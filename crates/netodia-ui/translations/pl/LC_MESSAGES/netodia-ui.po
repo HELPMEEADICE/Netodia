@@ -2032,10 +2032,6 @@ msgstr "Podobne utwory"
 msgid "Now Playing"
 msgstr "Teraz odtwarzane"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Zatrzymaj"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Utwory"

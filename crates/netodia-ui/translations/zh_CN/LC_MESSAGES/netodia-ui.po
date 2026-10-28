@@ -1996,10 +1996,6 @@ msgstr "相似歌曲"
 msgid "Now Playing"
 msgstr "正在播放"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "停止"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "曲目"

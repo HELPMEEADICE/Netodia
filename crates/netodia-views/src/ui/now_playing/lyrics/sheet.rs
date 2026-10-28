@@ -8,13 +8,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::rows::rows_for;
-use super::{LyricsUi, NowPlayingState, follow};
+use super::{LyricsUi, NowPlayingState, RowKind, follow};
 use netodia_app::library;
 use netodia_app::state::AppState;
-use netodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
+use netodia_core::entities::lyrics::{LyricLine, Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use netodia_core::entities::track::TrackSummary;
 use netodia_core::utils::toast::{self, ToastKind};
 use netodia_ui::{AppWindow, Lyrics, LyricsState};
@@ -91,12 +91,71 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
             state.lyrics_online_enabled.get(),
             !track.file_path.is_empty(),
         );
+        ensure_readings(&ui, &state, &np_state.lyrics);
     }));
     if let Err(e) = res {
         log::warn!(
             "ui::now_playing lyrics reseed task spawn_local: {}",
             netodia_core::error::describe(&e)
         );
+    }
+}
+
+/// Fill a resident sheet without fetching it again. Only readings are written back, so stamps,
+/// interludes, translations and the current line keep their state.
+pub(super) fn ensure_readings(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
+    if !state.lyrics_romanization_shown.get()
+        || ly.has_readings.get()
+        || ly.rows.borrow().is_empty()
+    {
+        return;
+    }
+    let lines = ly
+        .rows
+        .borrow()
+        .iter()
+        .filter(|row| matches!(row.kind, RowKind::Words))
+        .map(|row| LyricLine {
+            at_ms: None,
+            end_ms: None,
+            text: row.text.to_string(),
+            romanization: row.romanization.as_ref().map(ToString::to_string),
+            translation: None,
+        })
+        .collect();
+    let request = ly.reading_request.get().wrapping_add(1);
+    ly.reading_request.set(request);
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let ly = ly.clone();
+    let res = slint::spawn_local(Compat::new(async move {
+        let lines = match library::lyrics::add_readings(&state, lines).await {
+            Ok(lines) => lines,
+            Err(e) => {
+                log::debug!("lyrics readings: {}", netodia_core::error::describe(&e));
+                return;
+            }
+        };
+        let Some(ui) = weak.upgrade() else { return };
+        if ly.reading_request.get() != request {
+            return;
+        }
+        ly.has_readings.set(lines.iter().any(|line| {
+            line.romanization.as_deref().is_some_and(|reading| !reading.trim().is_empty())
+        }));
+        for (row, line) in ly
+            .rows
+            .borrow_mut()
+            .iter_mut()
+            .filter(|row| matches!(row.kind, RowKind::Words))
+            .zip(lines)
+        {
+            row.romanization = line.romanization.map(SharedString::from);
+        }
+        follow::republish(&ui, &ly);
+    }));
+    if let Err(e) = res {
+        log::warn!("lyrics readings spawn_local: {}", netodia_core::error::describe(&e));
     }
 }
 
@@ -301,6 +360,8 @@ pub(crate) fn release(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 }
 
 fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+    ly.reading_request.set(ly.reading_request.get().wrapping_add(1));
+    ly.has_readings.set(false);
     ly.rows.borrow_mut().clear();
     ly.offsets.borrow_mut().clear();
     ly.pinned.set(None);
@@ -316,5 +377,8 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.
 fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
+    ly.has_readings.set(sheet.lines.iter().any(|line| {
+        line.romanization.as_deref().is_some_and(|reading| !reading.trim().is_empty())
+    }));
     *ly.rows.borrow_mut() = rows_for(sheet);
 }

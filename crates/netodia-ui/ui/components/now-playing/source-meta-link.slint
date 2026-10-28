@@ -1,0 +1,15 @@
+// Shared by the full Now Playing view and the bar. A child TouchArea keeps a metadata click
+// separate from the bar's surrounding "open Now Playing" target.
+export component SourceMetaLink inherits Text {
+    in property <bool> link-enabled;
+    in property <brush> idle-color;
+    in property <brush> hover-color;
+    callback activated();
+    color: touch.has-hover && root.link-enabled ? root.hover-color : root.idle-color;
+
+    touch := TouchArea {
+        enabled: root.link-enabled;
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}

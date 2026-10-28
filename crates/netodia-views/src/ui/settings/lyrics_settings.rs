@@ -73,7 +73,7 @@ pub(crate) fn online_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool) 
 /// The handler both rows of the romanization switch register.
 ///
 /// The two views are never on screen together, so nothing has to be redrawn for the card's row;
-/// the menu's wraps this to re-lay the sheet it is standing on.
+/// the menu also requests any missing readings and re-lays the sheet it is standing on.
 pub(crate) fn romanization_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool) + 'static {
     mirrored(
         ui,

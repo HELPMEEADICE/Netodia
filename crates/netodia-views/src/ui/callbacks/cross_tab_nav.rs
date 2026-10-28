@@ -97,6 +97,7 @@ pub fn wire_cross_tab_nav(
     genres_ui: &Arc<GenresUi>,
 ) {
     super::artist_picker::wire(ui, state, artists_ui);
+    super::now_playing::wire_navigation(ui, state, albums_ui);
     let weak = ui.as_weak();
 
     // One trio per global, spelled once. A `macro_rules!` rather than a generic fn: these

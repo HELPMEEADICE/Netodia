@@ -2013,10 +2013,6 @@ msgstr ""
 msgid "Now Playing"
 msgstr ""
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr ""
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr ""

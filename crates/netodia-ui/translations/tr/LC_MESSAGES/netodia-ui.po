@@ -2021,10 +2021,6 @@ msgstr "Benzer şarkılar"
 msgid "Now Playing"
 msgstr "Şimdi çalıyor"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Durdur"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Parçalar"

@@ -2014,10 +2014,6 @@ msgstr "Canciones similares"
 msgid "Now Playing"
 msgstr "Reproduciendo"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Detener"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Pistas"

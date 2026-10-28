@@ -3,6 +3,7 @@ import { Theme } from "../theme.slint";
 import { Visualizer } from "../globals/audio.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
+import { SourceMetaLink } from "../components/now-playing/source-meta-link.slint";
 import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
 import { AccentGlyphButton } from "../components/now-playing/accent-glyph-button.slint";
 import { MetaChipStrip } from "../components/meta-chip-strip.slint";
@@ -217,18 +218,24 @@ export component NowPlayingView inherits Rectangle {
                                 horizontal-alignment: center;
                                 overflow: elide;
                             }
-                            Text {
+                            SourceMetaLink {
                                 text: Player.source-subtitle;
-                                color: Player.np-on-backdrop-muted;
+                                link-enabled: Player.can-open-source-artist;
+                                activated => { Player.open-source-artist(); }
+                                idle-color: Player.np-on-backdrop-muted;
+                                hover-color: Player.np-accent-bright;
                                 font-size: clamp(root.height * 0.04, Theme.font-size-sm, Theme.font-size-lg);
                                 horizontal-alignment: center;
                                 overflow: elide;
                             }
                             // An `if` rather than `visible:` — a hidden child still claims its
                             // cell, so an album-less track reserved a full text line for nothing.
-                            if Player.source-tertiary != "": Text {
+                            if Player.source-tertiary != "": SourceMetaLink {
                                 text: Player.source-tertiary;
-                                color: Player.np-on-backdrop-muted.transparentize(0.25);
+                                link-enabled: Player.can-open-source-album;
+                                activated => { Player.open-source-album(); }
+                                idle-color: Player.np-on-backdrop-muted.transparentize(0.25);
+                                hover-color: Player.np-accent-bright;
                                 font-size: clamp(root.height * 0.035, Theme.font-size-sm, Theme.font-size-md);
                                 horizontal-alignment: center;
                                 overflow: elide;

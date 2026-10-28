@@ -103,8 +103,8 @@ export global Lyrics {
     in-out property <bool> enabled;
     callback set-enabled(bool);
 
-    // Whether the romanization line is drawn. **A display filter and nothing more**: Rust fills it
-    // whatever this says, so a flip re-lays the sheet it already holds rather than resolving one.
+    // Whether readings are drawn. Supplied readings are preserved; if the sheet has none, Rust
+    // generates them on demand while this is enabled without resolving the sheet again.
     //
     // Two writers, this menu and the Settings card, which is why the answer lives in one
     // `SharedFlag` on `AppState` rather than in whichever of them wrote last.
