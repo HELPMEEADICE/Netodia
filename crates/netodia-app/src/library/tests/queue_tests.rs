@@ -567,3 +567,158 @@ async fn opening_files_that_cannot_be_read_is_an_error_rather_than_an_empty_queu
     assert!(lock_state(&fx.ctx.player_state).queue.tracks.is_empty());
     Ok(())
 }
+
+fn playback_mode_after_press(
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+) -> (RepeatMode, bool) {
+    cycle_playback_mode(player_state, sinks);
+    let state = lock_state(player_state);
+    (state.queue.repeat_mode, state.queue.shuffle_enabled)
+}
+
+#[test]
+fn playback_mode_cycles_through_all_four_modes_and_wraps() {
+    let (player_state, sinks) = seated_queue(5);
+
+    let modes = [
+        playback_mode_after_press(&player_state, &sinks),
+        playback_mode_after_press(&player_state, &sinks),
+        playback_mode_after_press(&player_state, &sinks),
+        playback_mode_after_press(&player_state, &sinks),
+        playback_mode_after_press(&player_state, &sinks),
+    ];
+
+    assert_eq!(
+        modes,
+        [
+            (RepeatMode::All, false),
+            (RepeatMode::One, false),
+            (RepeatMode::Off, true),
+            (RepeatMode::Off, false),
+            (RepeatMode::All, false),
+        ]
+    );
+}
+
+#[test]
+fn playback_mode_entering_shuffle_preserves_the_current_track() {
+    let (player_state, sinks) = seated_queue(5);
+    with_state_emit(&player_state, &sinks, |s| s.queue.current_index = Some(2));
+    set_repeat(&player_state, &sinks, RepeatMode::One);
+
+    cycle_playback_mode(&player_state, &sinks);
+
+    assert_eq!(lock_state(&player_state).queue.get_current().map(|track| track.id), Some(3));
+}
+
+#[test]
+fn playback_mode_leaving_shuffle_restores_order_and_preserves_the_current_track() {
+    let (player_state, sinks) = seated_queue(5);
+    with_state_emit(&player_state, &sinks, |s| {
+        s.queue.play_order.reverse();
+        s.queue.current_index = Some(1);
+        s.queue.shuffle_enabled = true;
+    });
+
+    cycle_playback_mode(&player_state, &sinks);
+
+    let state = lock_state(&player_state);
+    let order: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
+    assert_eq!(order, vec![1, 2, 3, 4, 5]);
+    assert_eq!(state.queue.get_current().map(|track| track.id), Some(4));
+}
+
+#[test]
+fn playback_mode_leaves_external_shuffle_repeat_combination_in_sequential_mode() {
+    let (player_state, sinks) = seated_queue(5);
+    set_shuffle(&player_state, &sinks, true);
+    set_repeat(&player_state, &sinks, RepeatMode::One);
+
+    let mode = playback_mode_after_press(&player_state, &sinks);
+
+    assert_eq!(mode, (RepeatMode::Off, false));
+}
+
+#[test]
+fn playback_mode_can_select_shuffle_before_tracks_are_added() {
+    let (player_state, sinks) = seated_queue(0);
+    set_repeat(&player_state, &sinks, RepeatMode::One);
+
+    let mode = playback_mode_after_press(&player_state, &sinks);
+
+    assert_eq!(mode, (RepeatMode::Off, true));
+}
+
+#[test]
+fn playback_mode_can_shuffle_a_single_track() {
+    let (player_state, sinks) = seated_queue(1);
+    set_repeat(&player_state, &sinks, RepeatMode::One);
+
+    let mode = playback_mode_after_press(&player_state, &sinks);
+
+    assert_eq!(mode, (RepeatMode::Off, true));
+    assert_eq!(lock_state(&player_state).queue.get_current().map(|track| track.id), Some(1));
+}
+
+#[tokio::test]
+async fn playback_mode_first_launch_is_sequential() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_root_with(|_| {})?;
+    let db = DbPool::test_pool().await?;
+
+    let plan = plan_restore(&db, &Arc::new(paths), None).await?;
+
+    assert_eq!(plan.repeat_mode, RepeatMode::Off);
+    assert!(!plan.shuffle_enabled);
+    Ok(())
+}
+
+async fn saved_playback_mode_after_press(
+    repeat: RepeatMode,
+    shuffle: bool,
+    track_count: i64,
+) -> Result<(RepeatMode, bool), AppError> {
+    let (_tmp, paths) = seeded_root_with(|_| {})?;
+    let paths = Arc::new(paths);
+    let db = DbPool::test_pool().await?;
+    let (player_state, sinks) = seated_queue(track_count);
+    set_repeat(&player_state, &sinks, repeat);
+    set_shuffle(&player_state, &sinks, shuffle);
+
+    cycle_playback_mode(&player_state, &sinks);
+    write_playback_mode(&paths, &player_state)?;
+    let plan = plan_restore(&db, &paths, None).await?;
+    let mut restarted = PlayerState::default();
+    apply_restore(&mut restarted, plan);
+    Ok((restarted.queue.repeat_mode, restarted.queue.shuffle_enabled))
+}
+
+#[tokio::test]
+async fn playback_mode_remembers_each_selection_after_restart() -> Result<(), AppError> {
+    assert_eq!(
+        saved_playback_mode_after_press(RepeatMode::Off, false, 3).await?,
+        (RepeatMode::All, false)
+    );
+    assert_eq!(
+        saved_playback_mode_after_press(RepeatMode::All, false, 3).await?,
+        (RepeatMode::One, false)
+    );
+    assert_eq!(
+        saved_playback_mode_after_press(RepeatMode::One, false, 3).await?,
+        (RepeatMode::Off, true)
+    );
+    assert_eq!(
+        saved_playback_mode_after_press(RepeatMode::Off, true, 3).await?,
+        (RepeatMode::Off, false)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn playback_mode_remembers_shuffle_even_without_tracks() -> Result<(), AppError> {
+    assert_eq!(
+        saved_playback_mode_after_press(RepeatMode::One, false, 0).await?,
+        (RepeatMode::Off, true)
+    );
+    Ok(())
+}

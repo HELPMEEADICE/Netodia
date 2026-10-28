@@ -289,29 +289,13 @@ export component NowPlayingBar inherits Rectangle {
                 if !Settings.overflow-repeat: VerticalLayout {
                     alignment: center;
                     IconButton {
-                        icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                        icon: Player.playback-mode-icon;
+                        hover-fg: Theme.accent;
                         press-shrink: true;
                         diameter: root.btn-d;
                         icon-size: root.btn-icon-d;
-                        active: Player.queue.repeat_mode != "off";
-                        tooltip-text: Player.queue.repeat_mode == "off"
-                            ? @tr("Repeat: off")
-                            : (Player.queue.repeat_mode == "one"
-                                ? @tr("Repeat: one")
-                                : @tr("Repeat: all"));
-                        clicked => { Player.cycle-repeat(); }
-                    }
-                }
-                if !Settings.overflow-shuffle: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "shuffle";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: Player.queue.shuffle;
-                        tooltip-text: Player.queue.shuffle ? @tr("Shuffle: on") : @tr("Shuffle: off");
-                        clicked => { Player.toggle-shuffle(); }
+                        tooltip-text: Player.playback-mode-tooltip;
+                        clicked => { Player.cycle-playback-mode(); }
                     }
                 }
                 if !Settings.overflow-favorite && Player.can-favorite: VerticalLayout {

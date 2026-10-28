@@ -57,9 +57,8 @@ silently miss the other.
 - **A pill landing on a later-declared sibling is lifted with a constant `z`**, on the host's
   branch at the level where it and the occluder are siblings, where lifting it overlaps nothing
   that takes a press. `z` re-sorts siblings after
-  `lower_layouts`, so a layout keeps its order. The miniplayer stacks three that way
-  (`mini-player.slint`'s captions row over the head over the timeline, and `MiniTimeline`'s
-  shuffle slot over the seek row), and `CustomTitleBar` sits over the sidebar and panel. The clip
+  `lower_layouts`, so a layout keeps its order. The miniplayer stacks its captions row over
+  the head over the timeline that way, and `CustomTitleBar` sits over the sidebar and panel. The clip
   half is `MiniCaptionsRow`'s, which clips only while it opens or closes so an open row's captions
   can hang their pills below it.
 
@@ -1457,3 +1456,18 @@ edit would otherwise reverse.
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
   two mounts, and the component's header says what stays the host's.
+
+### Playback mode control
+
+The main bar, mini-player timeline and overflow menu use `Player.cycle-playback-mode`
+and its shared icon and tooltip. Highlighting appears only on hover; sequential uses
+`playlist_play` so it stays
+distinct from repeat-all without a persistent accent colour. The cycle is sequential → repeat all →
+repeat one → shuffle → sequential. The application changes both queue flags under one
+lock and persists them together. A fresh profile starts in sequential mode, while
+subsequent launches restore the saved choice. Existing shuffle/repeat shortcuts and external media
+controls retain their independent actions; any shuffled state cycles back to sequential.
+`overflow-repeat` places the combined button in the overflow menu; the persisted
+`overflow-shuffle` preference is retained for settings compatibility and no longer places
+an additional control. An empty queue can also remember shuffle; starting a playlist
+applies that preference when tracks become available.

@@ -268,6 +268,14 @@ export global Player {
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();
+    callback cycle-playback-mode();
+    // Mode is conveyed by the icon; buttons highlight only while hovered.
+    out property <string> playback-mode-icon: root.queue.shuffle ? "shuffle"
+        : (root.queue.repeat_mode == "off" ? "playlist_play"
+            : (root.queue.repeat_mode == "one" ? "repeat_one" : "repeat"));
+    out property <string> playback-mode-tooltip: root.queue.shuffle ? @tr("Shuffle: on")
+        : (root.queue.repeat_mode == "off" ? @tr("In order")
+            : (root.queue.repeat_mode == "one" ? @tr("Repeat: one") : @tr("Repeat: all")));
     callback toggle-favorite();
     // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only.**
     callback set-sleep-timer(int /*minutes*/);

@@ -136,12 +136,7 @@ export component MiniTrailingControls inherits HorizontalLayout {
     }
 }
 
-// What sits under the controls in every layout: the seek row between shuffle and repeat, or for a
-// stream, which has no position to seek within, the bar's live pill in its slot.
-//
-// **The two queue modes flank the track rather than joining the transport**, whose row already
-// takes all the width the narrowest window can spare beside the artwork: two more buttons there
-// would come out of the artwork, and out of the strip's title.
+// The seek row and shared playback-mode button used by every mini-player layout.
 export component MiniTimeline inherits HorizontalLayout {
     in property <brush> label-color;
     in property <brush> fill-color;
@@ -155,21 +150,6 @@ export component MiniTimeline inherits HorizontalLayout {
     // Keeps the corner-resize TouchAreas' hit zones clear at both ends.
     padding-left: 4px;
     padding-right: 4px;
-
-    // Both pills open beside: the controls paint over this row, so one above lands under them.
-    // Shuffle's opens onto the seek row, declared after it, hence lifted over it.
-    VerticalLayout {
-        z: 1;
-        alignment: center;
-        MiniIconButton {
-            icon: "shuffle";
-            active: Player.queue.shuffle;
-            tooltip-text: Player.queue.shuffle
-                ? @tr("Shuffle: on") : @tr("Shuffle: off");
-            tooltip-side: TooltipSide.right;
-            clicked => { Player.toggle-shuffle(); }
-        }
-    }
 
     VerticalLayout {
         horizontal-stretch: 1;
@@ -186,15 +166,10 @@ export component MiniTimeline inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         MiniIconButton {
-            icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-            active: Player.queue.repeat_mode != "off";
-            tooltip-text: Player.queue.repeat_mode == "off"
-                ? @tr("Repeat: off")
-                : (Player.queue.repeat_mode == "one"
-                    ? @tr("Repeat: one")
-                    : @tr("Repeat: all"));
+            icon: Player.playback-mode-icon;
+            tooltip-text: Player.playback-mode-tooltip;
             tooltip-side: TooltipSide.left;
-            clicked => { Player.cycle-repeat(); }
+            clicked => { Player.cycle-playback-mode(); }
         }
     }
 }

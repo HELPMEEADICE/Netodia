@@ -710,9 +710,7 @@ msgid "Play"
 msgstr "Phát"
 
 #: ui/components/grid/card-context-menu.slint
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
-#: ui/views/settings/overflow-menu-section.slint
 msgid "Shuffle"
 msgstr "Trộn bài"
 
@@ -878,31 +876,6 @@ msgstr "Phông nền album: bật"
 #: ui/layout/now-playing-bar.slint
 msgid "Unfavorite"
 msgstr "Bỏ yêu thích"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: off"
-msgstr "Trộn bài: tắt"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: on"
-msgstr "Trộn bài: bật"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: off"
-msgstr "Lặp lại: tắt"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: one"
-msgstr "Lặp lại: một bài"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: all"
-msgstr "Lặp lại: tất cả"
 
 #: ui/components/now-playing/flyout-presets.slint
 #: ui/components/now-playing/overflow-menu.slint
@@ -1077,11 +1050,6 @@ msgid "Very high"
 msgstr "Rất cao"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/overflow-menu-section.slint
-msgid "Repeat"
-msgstr "Lặp lại"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
@@ -1231,7 +1199,6 @@ msgid "Skip"
 msgstr "Bỏ qua"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-#: ui/views/favorites/cloud-entity-detail-view.slint
 msgid "Back"
 msgstr "Quay lại"
 
@@ -1344,8 +1311,8 @@ msgid "{n} favorite"
 msgid_plural "{n} favorites"
 msgstr[0] "{n} mục yêu thích"
 
-#: ui/globals/dialog.slint ui/views/my-library-view.slint
-#: ui/views/search-view.slint
+#: ui/globals/dialog.slint ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/search-view.slint
 msgid "Artists"
 msgstr "Nghệ sĩ"
 
@@ -1447,6 +1414,22 @@ msgstr "Bài trước"
 #: ui/globals/player.slint
 msgid "Next (hold to fast-forward)"
 msgstr "Bài tiếp theo (giữ để tua nhanh)"
+
+#: ui/globals/player.slint
+msgid "Shuffle: on"
+msgstr "Trộn bài: bật"
+
+#: ui/globals/player.slint ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "Theo thứ tự"
+
+#: ui/globals/player.slint
+msgid "Repeat: all"
+msgstr "Lặp lại: tất cả"
+
+#: ui/globals/player.slint
+msgid "Repeat: one"
+msgstr "Lặp lại: một bài"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1775,9 +1758,10 @@ msgstr "Dạng thẻ"
 msgid "List view"
 msgstr "Dạng danh sách"
 
-#: ui/views/favorites-view.slint ui/views/my-library-view.slint
-#: ui/views/my-library/artist-detail.slint ui/views/my-library/tab-pills.slint
-#: ui/views/search-view.slint
+#: ui/views/favorites-view.slint
+#: ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
 msgid "Albums"
 msgstr "Album"
 
@@ -2017,10 +2001,6 @@ msgid "Tracks"
 msgstr "Bản nhạc"
 
 #: ui/views/my-library/tab-pills.slint
-msgid "In order"
-msgstr "Theo thứ tự"
-
-#: ui/views/my-library/tab-pills.slint
 msgid "Edit artwork"
 msgstr "Sửa ảnh bìa"
 
@@ -2148,7 +2128,8 @@ msgstr "Giao diện"
 msgid "Library"
 msgstr "Thư viện"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings-view.slint ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Phát nhạc"

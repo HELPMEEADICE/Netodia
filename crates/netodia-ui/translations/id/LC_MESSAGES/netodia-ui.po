@@ -710,9 +710,7 @@ msgid "Play"
 msgstr "Putar"
 
 #: ui/components/grid/card-context-menu.slint
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
-#: ui/views/settings/overflow-menu-section.slint
 msgid "Shuffle"
 msgstr "Acak"
 
@@ -878,31 +876,6 @@ msgstr "Latar Album: aktif"
 #: ui/layout/now-playing-bar.slint
 msgid "Unfavorite"
 msgstr "Hapus Favorit"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: off"
-msgstr "Acak: nonaktif"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: on"
-msgstr "Acak: aktif"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: off"
-msgstr "Ulangi: nonaktif"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: one"
-msgstr "Ulangi: satu"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: all"
-msgstr "Ulangi: semua"
 
 #: ui/components/now-playing/flyout-presets.slint
 #: ui/components/now-playing/overflow-menu.slint
@@ -1077,11 +1050,6 @@ msgid "Very high"
 msgstr "Sangat tinggi"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/overflow-menu-section.slint
-msgid "Repeat"
-msgstr "Ulangi"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
@@ -1231,7 +1199,6 @@ msgid "Skip"
 msgstr "Lewati"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-#: ui/views/favorites/cloud-entity-detail-view.slint
 msgid "Back"
 msgstr "Kembali"
 
@@ -1344,8 +1311,8 @@ msgid "{n} favorite"
 msgid_plural "{n} favorites"
 msgstr[0] "{n} favorit"
 
-#: ui/globals/dialog.slint ui/views/my-library-view.slint
-#: ui/views/search-view.slint
+#: ui/globals/dialog.slint ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/search-view.slint
 msgid "Artists"
 msgstr "Artis"
 
@@ -1447,6 +1414,22 @@ msgstr "Sebelumnya"
 #: ui/globals/player.slint
 msgid "Next (hold to fast-forward)"
 msgstr "Berikutnya (tahan untuk maju cepat)"
+
+#: ui/globals/player.slint
+msgid "Shuffle: on"
+msgstr "Acak: aktif"
+
+#: ui/globals/player.slint ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "Berurutan"
+
+#: ui/globals/player.slint
+msgid "Repeat: all"
+msgstr "Ulangi: semua"
+
+#: ui/globals/player.slint
+msgid "Repeat: one"
+msgstr "Ulangi: satu"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1775,9 +1758,10 @@ msgstr "Tampilan kartu"
 msgid "List view"
 msgstr "Tampilan daftar"
 
-#: ui/views/favorites-view.slint ui/views/my-library-view.slint
-#: ui/views/my-library/artist-detail.slint ui/views/my-library/tab-pills.slint
-#: ui/views/search-view.slint
+#: ui/views/favorites-view.slint
+#: ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
 msgid "Albums"
 msgstr "Album"
 
@@ -2017,10 +2001,6 @@ msgid "Tracks"
 msgstr "Lagu"
 
 #: ui/views/my-library/tab-pills.slint
-msgid "In order"
-msgstr "Berurutan"
-
-#: ui/views/my-library/tab-pills.slint
 msgid "Edit artwork"
 msgstr "Edit sampul"
 
@@ -2148,7 +2128,8 @@ msgstr "Antarmuka"
 msgid "Library"
 msgstr "Pustaka"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings-view.slint ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Pemutaran"
