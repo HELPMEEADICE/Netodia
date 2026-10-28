@@ -151,12 +151,13 @@ fn chinese_lyrics_and_credits_get_no_automatic_pinyin() {
 }
 
 #[test]
-fn chinese_stays_written_beside_other_scripts() {
+fn chinese_stays_written_beside_other_scripts() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(one("사랑 我爱你 밤").as_deref(), Some("sarang 我爱你 bam"));
-    let mixed = one("我爱你 Привет 世界").expect("Cyrillic should still get a reading");
+    let mixed = one("我爱你 Привет 世界").ok_or("Cyrillic should still get a reading")?;
     assert!(mixed.starts_with("我爱你 "));
     assert!(mixed.ends_with(" 世界"));
     assert!(!mixed.contains("Привет"));
+    Ok(())
 }
 
 #[test]
