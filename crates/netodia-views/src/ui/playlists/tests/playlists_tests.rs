@@ -29,7 +29,7 @@ const GRID_CALLBACKS: &str = include_str!("../callbacks/grid.rs");
 const ENTRY_CARD: &str =
     include_str!("../../../../../netodia-ui/ui/views/my-library/entry-card.slint");
 
-/// FocusScope accepts an unfocused press before a sibling below it can receive it. Both
+/// `FocusScope` accepts an unfocused press before a sibling below it can receive it. Both
 /// recommendation and roaming entries must take focus through the same click that activates.
 #[test]
 fn entry_card_focus_does_not_consume_the_first_activation() {
