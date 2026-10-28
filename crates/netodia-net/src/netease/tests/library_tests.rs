@@ -8,7 +8,7 @@ use serde_json::json;
 fn all_time_ranking_retains_every_song_count_and_large_id() -> Result<()> {
     let songs = super::decode_most_played_songs(json!({
         "allData": [
-            {"playCount": 100, "score": 100, "song": {"id": 4_000_000_001_i64, "name": "First", "artists": [{"id": 7, "name": "Artist"}], "album": {"id": 1, "name": "Album", "picUrl": "https://p1.music.126.net/a.jpg"}, "duration": 210000}},
+            {"playCount": 100, "score": 100, "song": {"id": 4_000_000_001_i64, "name": "First", "artists": [{"id": 7, "name": "Artist"}], "album": {"id": 1, "name": "Album", "picUrl": "https://p1.music.126.net/a.jpg"}, "duration": 210_000}},
             {"playCount": 42, "score": 42, "song": {"id": 4_000_000_002_i64, "name": "Second"}},
             {"playCount": 1, "score": 1, "song": {"id": 7, "name": "Third"}}
         ],
