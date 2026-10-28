@@ -40,6 +40,11 @@ rustix = { version = "1.1.5", features = ["process", "thread"] }
 # interface `wasapi` doesn't wrap, the endpoint volume, and is held to that same release; every
 # feature it asks for is already on through the two above it.
 [target.'cfg(target_os = "windows")'.dependencies]
+# The shared WASAPI callback needs the same scheduling protection as our exclusive writer.
+# CPAL only promotes its worker when `realtime` is enabled; keep other platforms' shared-stream
+# scheduling unchanged. CPAL owns registration on its worker before the first callback,
+# including the fallback when MMCSS promotion is refused.
+cpal = { workspace = true, features = ["realtime"] }
 wasapi = "0.25.0"
 windows-sys.workspace = true
 windows = { version = "0.62.2", features = [
