@@ -706,7 +706,7 @@ msgstr "Pasta"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Tocar"
@@ -1065,7 +1065,7 @@ msgstr "Pausar (segure para parar)"
 msgid "Play (hold to stop)"
 msgstr "Tocar (segure para parar)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Pausar"
@@ -1414,7 +1414,7 @@ msgstr "Nenhuma faixa tocando"
 msgid "Previous (hold to rewind)"
 msgstr "Anterior (segure para retroceder)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Anterior"
 
@@ -1437,6 +1437,19 @@ msgstr "Repetir: todas"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Repetir: uma"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Próxima faixa"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Mostrar / ocultar janela"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Sair do Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1814,6 +1827,7 @@ msgstr "Remover álbum dos favoritos"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Tentar novamente"
@@ -2102,6 +2116,7 @@ msgstr "Nenhuma faixa tocada recentemente"
 msgid "Play something and it will show up here."
 msgstr "Toque algo e vai aparecer aqui."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "Carregando histórico do NetEase…"

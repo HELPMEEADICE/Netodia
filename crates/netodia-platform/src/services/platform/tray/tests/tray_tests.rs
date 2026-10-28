@@ -1,6 +1,6 @@
 //! Tests for the `TraySnapshot` rendering helpers.
 
-use super::{TrayAction, TraySnapshot};
+use super::{TrayAction, TrayMenuLabels, TraySnapshot};
 
 #[test]
 fn tooltip_falls_back_to_brand_when_idle() {
@@ -46,6 +46,21 @@ fn play_pause_label_tracks_is_playing() {
     assert_eq!(snap.play_pause_label(), "Play");
     snap.is_playing = true;
     assert_eq!(snap.play_pause_label(), "Pause");
+}
+
+#[test]
+fn play_pause_label_uses_translated_labels() {
+    let mut snap = TraySnapshot {
+        labels: TrayMenuLabels {
+            play: "播放".to_owned(),
+            pause: "暂停".to_owned(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(snap.play_pause_label(), "播放");
+    snap.is_playing = true;
+    assert_eq!(snap.play_pause_label(), "暂停");
 }
 
 #[test]

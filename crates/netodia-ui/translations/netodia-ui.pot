@@ -705,7 +705,7 @@ msgstr ""
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr ""
@@ -1064,7 +1064,7 @@ msgstr ""
 msgid "Play (hold to stop)"
 msgstr ""
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr ""
@@ -1413,7 +1413,7 @@ msgstr ""
 msgid "Previous (hold to rewind)"
 msgstr ""
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr ""
 
@@ -1435,6 +1435,19 @@ msgstr ""
 
 #: ui/globals/player.slint
 msgid "Repeat: one"
+msgstr ""
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr ""
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr ""
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
 msgstr ""
 
 #: ui/globals/signal-path.slint
@@ -1813,6 +1826,7 @@ msgstr ""
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr ""
@@ -2101,6 +2115,7 @@ msgstr ""
 msgid "Play something and it will show up here."
 msgstr ""
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr ""

@@ -288,7 +288,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   media controls' `EventSink`, `ShowHideWindow`/`Quit` hop to the UI via `invoke_from_event_loop`,
   a `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
   and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
-  → `init_tray` `None`/`false`, tray-less still usable; labels English-only.
+  → `init_tray` `None`/`false`, tray-less still usable. Menu labels come from the bundled
+  translations on `WindowChrome`; `on_locale_changed` republishes them even while playback is idle.
   `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from
   `boot::ui_setup::install`; flipping it is restart-gated through `DialogKind.restart-tray` → `WindowChrome.restart-tray()` →
   `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,

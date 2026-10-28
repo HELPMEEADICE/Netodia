@@ -17,7 +17,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
+use tokio::sync::watch;
 
+use crate::ui::locale_refresh::on_locale_changed;
 use crate::ui::shell::event_sink::SlintEventSink;
 use netodia_app::state::AppState;
 use netodia_app::tasks::TaskSpawner;
@@ -25,9 +27,9 @@ use netodia_core::error::describe;
 use netodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 use netodia_engine::player::engine::state::PlayerViewModelLight;
 use netodia_platform::services::platform::tray::{
-    self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot,
+    self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TrayMenuLabels, TraySnapshot,
 };
-use netodia_ui::{AppWindow, Settings, Visualizer};
+use netodia_ui::{AppWindow, Settings, Visualizer, WindowChrome};
 
 /// Mirrors `settings.tray.close_to_tray`, so `window_chrome`'s close handlers
 /// read the preference without touching disk.
@@ -207,15 +209,22 @@ fn reschedule_geometry_restore(
 pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     let (tx, rx) = tokio::sync::mpsc::channel::<TrayAction>(TRAY_ACTION_CHANNEL_CAP);
     spawn_action_receiver(spawner, state, ui.as_weak(), rx);
+    let (labels_tx, labels_rx) = watch::channel(menu_labels(ui));
+    if let Err(e) = on_locale_changed(state, ui.as_weak(), move |ui| {
+        labels_tx.send_replace(menu_labels(ui));
+    }) {
+        log::warn!("tray: locale subscriber failed to spawn: {}", describe(&e));
+    }
 
     #[cfg(target_os = "linux")]
     {
         // Linux: ksni runs on its own thread — create eagerly.
-        match tray::init_tray(tx) {
+        let linux_tray = tray::init_tray(tx, &labels_rx.borrow());
+        match linux_tray {
             Some(linux_tray) => {
                 TRAY_ACTIVE.store(true, Ordering::Relaxed);
                 ui.global::<Settings>().set_tray_active(true);
-                spawn_state_subscriber_linux(spawner, state, linux_tray);
+                spawn_state_subscriber_linux(spawner, state, linux_tray, labels_rx);
             }
             None => log::info!("tray: not active — close-to-tray will fall back to quitting"),
         }
@@ -227,12 +236,13 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
         let sinks = state.sinks.clone();
         let weak = ui.as_weak();
         if let Err(e) = slint::invoke_from_event_loop(move || {
-            if tray::init_tray(tx) {
+            let active = tray::init_tray(tx, &labels_rx.borrow());
+            if active {
                 TRAY_ACTIVE.store(true, Ordering::Relaxed);
                 if let Some(ui) = weak.upgrade() {
                     ui.global::<Settings>().set_tray_active(true);
                 }
-                spawn_state_subscriber_local(&sinks);
+                spawn_state_subscriber_local(&sinks, labels_rx);
             } else {
                 log::info!("tray: not active — close-to-tray will fall back to quitting");
             }
@@ -315,15 +325,29 @@ fn toggle_window(ui_weak: &slint::Weak<AppWindow>) {
     }
 }
 
-/// Build a `TraySnapshot` from the latest light view-model.
+/// Resolve the native tray's labels through Slint's bundled translations on the UI thread.
+fn menu_labels(ui: &AppWindow) -> TrayMenuLabels {
+    let chrome = ui.global::<WindowChrome>();
+    TrayMenuLabels {
+        play: chrome.get_tray_play_label().to_string(),
+        pause: chrome.get_tray_pause_label().to_string(),
+        next: chrome.get_tray_next_label().to_string(),
+        previous: chrome.get_tray_previous_label().to_string(),
+        show_hide: chrome.get_tray_show_hide_label().to_string(),
+        quit: chrome.get_tray_quit_label().to_string(),
+    }
+}
+
+/// Build a `TraySnapshot` from the latest light view-model and translated labels.
 ///
 /// Through `source()`, so the tooltip uses the same title and artist as the OS media controls.
-fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
+fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>, labels: &TrayMenuLabels) -> TraySnapshot {
     let Some(vm) = vm else {
-        return TraySnapshot::default();
+        return TraySnapshot { labels: labels.clone(), ..Default::default() };
     };
     let source = vm.source();
     TraySnapshot {
+        labels: labels.clone(),
         track_title: source.as_ref().map(|s| s.title.to_owned()),
         track_artist: source.as_ref().and_then(|s| s.secondary.map(str::to_owned)),
         is_playing: vm.status == "playing",
@@ -335,14 +359,20 @@ fn snapshot_from_vm(vm: Option<&PlayerViewModelLight>) -> TraySnapshot {
 /// Linux state subscriber: a tokio task owning the `Send` `LinuxTray`. Dropping the tray
 /// when the task ends removes the icon, so no explicit teardown is needed.
 #[cfg(target_os = "linux")]
-fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: tray::LinuxTray) {
+fn spawn_state_subscriber_linux(
+    spawner: &TaskSpawner,
+    state: &AppState,
+    tray: tray::LinuxTray,
+    mut labels_rx: watch::Receiver<TrayMenuLabels>,
+) {
     let mut rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| async move {
         // `update` is a blocking D-Bus round trip to ksni's service thread, so
         // `block_in_place` lends the worker out rather than stalling the runtime. The
         // channel emits on *every* state change where the tray renders only title, artist
         // and play/pause, so diff against the last snapshot to keep traffic per-track.
-        let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
+        let mut last =
+            snapshot_from_vm(rx.borrow_and_update().as_ref(), &labels_rx.borrow_and_update());
         tokio::task::block_in_place(|| tray.update(&last));
         loop {
             tokio::select! {
@@ -351,14 +381,20 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
                     if changed.is_err() {
                         break;
                     }
-                    let snapshot = snapshot_from_vm(rx.borrow_and_update().as_ref());
-                    if snapshot == last {
-                        continue;
+                }
+                changed = labels_rx.changed() => {
+                    if changed.is_err() {
+                        break;
                     }
-                    tokio::task::block_in_place(|| tray.update(&snapshot));
-                    last = snapshot;
                 }
             }
+            let snapshot =
+                snapshot_from_vm(rx.borrow_and_update().as_ref(), &labels_rx.borrow_and_update());
+            if snapshot == last {
+                continue;
+            }
+            tokio::task::block_in_place(|| tray.update(&snapshot));
+            last = snapshot;
         }
         log::info!("tray: state subscriber stopped");
     });
@@ -370,17 +406,29 @@ fn spawn_state_subscriber_linux(spawner: &TaskSpawner, state: &AppState, tray: t
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn spawn_state_subscriber_local(
     sinks: &Arc<netodia_engine::player::engine::event_sink::PlayerSinks>,
+    mut labels_rx: watch::Receiver<TrayMenuLabels>,
 ) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
         // Diff as the Linux subscriber does.
-        let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
+        let mut last =
+            snapshot_from_vm(rx.borrow_and_update().as_ref(), &labels_rx.borrow_and_update());
         tray::update_tray(&last);
         loop {
-            if rx.changed().await.is_err() {
-                break;
+            tokio::select! {
+                changed = rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                }
+                changed = labels_rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                }
             }
-            let snapshot = snapshot_from_vm(rx.borrow_and_update().as_ref());
+            let snapshot =
+                snapshot_from_vm(rx.borrow_and_update().as_ref(), &labels_rx.borrow_and_update());
             if snapshot == last {
                 continue;
             }

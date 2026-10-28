@@ -708,7 +708,7 @@ msgstr "Klasör"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Çal"
@@ -1067,7 +1067,7 @@ msgstr "Duraklat (durdurmak için basılı tut)"
 msgid "Play (hold to stop)"
 msgstr "Çal (durdurmak için basılı tut)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Duraklat"
@@ -1421,7 +1421,7 @@ msgstr "Çalan parça yok"
 msgid "Previous (hold to rewind)"
 msgstr "Önceki (geri sarmak için basılı tut)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Önceki"
 
@@ -1444,6 +1444,19 @@ msgstr "Tekrarla: tümü"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Tekrarla: bir"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Sonraki parça"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Pencereyi göster / gizle"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Netodia’dan çık"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1821,6 +1834,7 @@ msgstr "Albümü favorilerden kaldır"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Yeniden dene"
@@ -2109,6 +2123,7 @@ msgstr "Son çalınan parça yok"
 msgid "Play something and it will show up here."
 msgstr "Bir şey çal, burada görünsün."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "NetEase geçmişi yükleniyor…"

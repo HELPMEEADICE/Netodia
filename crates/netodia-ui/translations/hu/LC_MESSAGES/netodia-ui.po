@@ -708,7 +708,7 @@ msgstr "Mappa"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Lejátszás"
@@ -1067,7 +1067,7 @@ msgstr "Szünet (tartsd lenyomva a leállításhoz)"
 msgid "Play (hold to stop)"
 msgstr "Lejátszás (tartsd lenyomva a leállításhoz)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Szünet"
@@ -1416,7 +1416,7 @@ msgstr "Nincs lejátszott szám"
 msgid "Previous (hold to rewind)"
 msgstr "Előző (tartsd lenyomva a visszatekeréshez)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Előző"
 
@@ -1439,6 +1439,19 @@ msgstr "Ismétlés: összes"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Ismétlés: egy szám"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Következő szám"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Ablak megjelenítése / elrejtése"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Kilépés a Netodiából"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1816,6 +1829,7 @@ msgstr "Album eltávolítása a kedvencekből"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Újra"
@@ -2104,6 +2118,7 @@ msgstr "Nincsenek nemrég lejátszott számok"
 msgid "Play something and it will show up here."
 msgstr "Játssz le valamit, és itt fog megjelenni."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "NetEase-előzmények betöltése…"

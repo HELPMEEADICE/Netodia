@@ -707,7 +707,7 @@ msgstr "Φάκελος"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Αναπαραγωγή"
@@ -1066,7 +1066,7 @@ msgstr "Παύση (κράτα πατημένο για διακοπή)"
 msgid "Play (hold to stop)"
 msgstr "Αναπαραγωγή (κράτα πατημένο για διακοπή)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Παύση"
@@ -1416,7 +1416,7 @@ msgstr "Δεν παίζει κομμάτι"
 msgid "Previous (hold to rewind)"
 msgstr "Προηγούμενο (κράτα πατημένο για γρήγορη επιστροφή)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Προηγούμενο"
 
@@ -1439,6 +1439,19 @@ msgstr "Επανάληψη: όλα"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Επανάληψη: ένα"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Επόμενο κομμάτι"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Εμφάνιση / απόκρυψη παραθύρου"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Έξοδος από το Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1816,6 +1829,7 @@ msgstr "Αφαίρεση άλμπουμ από τα αγαπημένα"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Επανάληψη"
@@ -2104,6 +2118,7 @@ msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κο
 msgid "Play something and it will show up here."
 msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "Φόρτωση ιστορικού NetEase…"

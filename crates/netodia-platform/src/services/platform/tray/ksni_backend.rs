@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use netodia_core::error::describe;
 
-use super::{TrayAction, TraySnapshot};
+use super::{TrayAction, TrayMenuLabels, TraySnapshot};
 
 /// ksni [`Tray`](ksni::Tray) implementation. Holds the latest render snapshot
 /// plus the channel back to `ui::shell::tray_bridge`. Menu callbacks `try_send`
@@ -81,11 +81,19 @@ impl ksni::Tray for NetodiaTray {
             .into(),
             MenuItem::Separator,
             Self::action_item(self.snapshot.play_pause_label(), TrayAction::PlayPause),
-            Self::action_item_enabled("Next", TrayAction::Next, self.snapshot.has_next),
-            Self::action_item_enabled("Previous", TrayAction::Previous, self.snapshot.has_previous),
+            Self::action_item_enabled(
+                &self.snapshot.labels.next,
+                TrayAction::Next,
+                self.snapshot.has_next,
+            ),
+            Self::action_item_enabled(
+                &self.snapshot.labels.previous,
+                TrayAction::Previous,
+                self.snapshot.has_previous,
+            ),
             MenuItem::Separator,
-            Self::action_item("Show / Hide Window", TrayAction::ShowHideWindow),
-            Self::action_item("Quit Netodia", TrayAction::Quit),
+            Self::action_item(&self.snapshot.labels.show_hide, TrayAction::ShowHideWindow),
+            Self::action_item(&self.snapshot.labels.quit, TrayAction::Quit),
         ]
     }
 }
@@ -140,11 +148,12 @@ fn icon_for() -> Vec<Icon> {
 
 /// Spawn the `StatusNotifierItem` service. Returns `None` when the session has
 /// no SNI host (vanilla GNOME) or no D-Bus — the app then runs without a tray.
-pub fn init(action_tx: mpsc::Sender<TrayAction>) -> Option<LinuxTray> {
+pub fn init(action_tx: mpsc::Sender<TrayAction>, labels: &TrayMenuLabels) -> Option<LinuxTray> {
     use ksni::blocking::TrayMethods;
 
     let icon = icon_for();
-    let tray = NetodiaTray { snapshot: TraySnapshot::default(), icon, action_tx };
+    let snapshot = TraySnapshot { labels: labels.clone(), ..Default::default() };
+    let tray = NetodiaTray { snapshot, icon, action_tx };
 
     match tray.spawn() {
         Ok(handle) => {

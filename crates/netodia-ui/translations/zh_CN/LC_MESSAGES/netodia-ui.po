@@ -704,7 +704,7 @@ msgstr "文件夹"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "播放"
@@ -1063,7 +1063,7 @@ msgstr "暂停（长按以停止）"
 msgid "Play (hold to stop)"
 msgstr "播放（长按以停止）"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "暂停"
@@ -1407,7 +1407,7 @@ msgstr "没有正在播放的曲目"
 msgid "Previous (hold to rewind)"
 msgstr "上一首（长按以倒退）"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "上一首"
 
@@ -1430,6 +1430,19 @@ msgstr "重复：全部"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "重复：单曲"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "下一首"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "显示 / 隐藏窗口"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "退出 Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1799,6 +1812,7 @@ msgstr "取消收藏专辑"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "重试"
@@ -2084,6 +2098,7 @@ msgstr "没有最近播放的曲目"
 msgid "Play something and it will show up here."
 msgstr "播放一些音乐，它们就会显示在这里。"
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "正在加载网易云播放记录…"

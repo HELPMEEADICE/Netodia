@@ -704,7 +704,7 @@ msgstr "Folder"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Putar"
@@ -1063,7 +1063,7 @@ msgstr "Jeda (tahan untuk berhenti)"
 msgid "Play (hold to stop)"
 msgstr "Putar (tahan untuk berhenti)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Jeda"
@@ -1407,7 +1407,7 @@ msgstr "Tidak ada lagu yang diputar"
 msgid "Previous (hold to rewind)"
 msgstr "Sebelumnya (tahan untuk mundur)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Sebelumnya"
 
@@ -1430,6 +1430,19 @@ msgstr "Ulangi: semua"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Ulangi: satu"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Lagu berikutnya"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Tampilkan / sembunyikan jendela"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Keluar dari Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1799,6 +1812,7 @@ msgstr "Hapus album dari favorit"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Coba lagi"
@@ -2084,6 +2098,7 @@ msgstr "Belum ada lagu yang terakhir diputar"
 msgid "Play something and it will show up here."
 msgstr "Putar sesuatu dan akan muncul di sini."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "Memuat riwayat NetEase…"

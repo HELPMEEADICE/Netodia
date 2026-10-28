@@ -708,7 +708,7 @@ msgstr "Тека"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Відтворити"
@@ -1067,7 +1067,7 @@ msgstr "Пауза (утримуйте, щоб зупинити)"
 msgid "Play (hold to stop)"
 msgstr "Відтворити (утримуйте, щоб зупинити)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Пауза"
@@ -1421,7 +1421,7 @@ msgstr "Нічого не грає"
 msgid "Previous (hold to rewind)"
 msgstr "Попередній (утримуйте, щоб перемотати назад)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Попередній"
 
@@ -1444,6 +1444,19 @@ msgstr "Повтор: усі"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Повтор: один трек"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Наступна композиція"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Показати / приховати вікно"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Вийти з Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1829,6 +1842,7 @@ msgstr "Вилучити альбом з улюблених"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Повторити"
@@ -2120,6 +2134,7 @@ msgstr "Нещодавно прослуханих треків немає"
 msgid "Play something and it will show up here."
 msgstr "Увімкніть щось, і воно зʼявиться тут."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "Завантаження історії NetEase…"

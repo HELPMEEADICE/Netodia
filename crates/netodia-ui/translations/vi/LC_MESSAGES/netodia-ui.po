@@ -704,7 +704,7 @@ msgstr "Thư mục"
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/cloud-track-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Play"
 msgstr "Phát"
@@ -1063,7 +1063,7 @@ msgstr "Tạm dừng (giữ để dừng hẳn)"
 msgid "Play (hold to stop)"
 msgstr "Phát (giữ để dừng hẳn)"
 
-#: ui/components/now-playing/play-button.slint
+#: ui/components/now-playing/play-button.slint ui/globals/shell.slint
 #: ui/views/my-library/tab-pills.slint
 msgid "Pause"
 msgstr "Tạm dừng"
@@ -1407,7 +1407,7 @@ msgstr "Không có bản nhạc nào đang phát"
 msgid "Previous (hold to rewind)"
 msgstr "Bài trước (giữ để tua lại)"
 
-#: ui/globals/player.slint
+#: ui/globals/player.slint ui/globals/shell.slint
 msgid "Previous"
 msgstr "Bài trước"
 
@@ -1430,6 +1430,19 @@ msgstr "Lặp lại: tất cả"
 #: ui/globals/player.slint
 msgid "Repeat: one"
 msgstr "Lặp lại: một bài"
+
+#. Translators: Skip to the next track in the playback queue.
+#: ui/globals/shell.slint
+msgid "Next track"
+msgstr "Bài tiếp theo"
+
+#: ui/globals/shell.slint
+msgid "Show / Hide Window"
+msgstr "Hiện / ẩn cửa sổ"
+
+#: ui/globals/shell.slint
+msgid "Quit Netodia"
+msgstr "Thoát Netodia"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1799,6 +1812,7 @@ msgstr "Bỏ yêu thích album"
 #: ui/views/favorites/cloud-favorites-albums-tab.slint
 #: ui/views/favorites/cloud-favorites-songs-tab.slint
 #: ui/views/my-library/playlists-tab.slint
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Retry"
 msgstr "Thử lại"
@@ -2084,6 +2098,7 @@ msgstr "Chưa có bản nhạc nào phát gần đây"
 msgid "Play something and it will show up here."
 msgstr "Hãy phát một bài và nó sẽ hiện ở đây."
 
+#: ui/views/recently-played/most-played-tab.slint
 #: ui/views/recently-played/songs-tab.slint
 msgid "Loading NetEase history…"
 msgstr "Đang tải lịch sử NetEase…"

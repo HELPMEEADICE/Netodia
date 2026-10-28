@@ -17,10 +17,8 @@
 //!
 //! ## Menu strings
 //!
-//! The menu labels are English-only. The tray runs in the services layer and
-//! must not depend on Slint, so it cannot reach the `@tr(...)` bundled-
-//! translation pipeline (which only resolves literals inside `.slint`).
-//! Localising the tray menu is a deferred follow-up.
+//! The UI resolves bundled translations and supplies plain menu labels at startup
+//! and after every language switch. Neither backend depends on Slint.
 
 #[cfg(target_os = "linux")]
 mod ksni_backend;
@@ -52,13 +50,39 @@ pub enum TrayAction {
     Quit,
 }
 
-/// Minimal render state the tray needs: tooltip text + the Play/Pause label.
+/// Translated menu labels supplied by the UI thread.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayMenuLabels {
+    pub play: String,
+    pub pause: String,
+    pub next: String,
+    pub previous: String,
+    pub show_hide: String,
+    pub quit: String,
+}
+
+impl Default for TrayMenuLabels {
+    fn default() -> Self {
+        Self {
+            play: "Play".to_owned(),
+            pause: "Pause".to_owned(),
+            next: "Next track".to_owned(),
+            previous: "Previous".to_owned(),
+            show_hide: "Show / Hide Window".to_owned(),
+            quit: "Quit Netodia".to_owned(),
+        }
+    }
+}
+
+/// Minimal render state the tray needs: tooltip text, transport state and menu labels.
 /// Derived from `PlayerViewModelLight` by `ui::shell::tray_bridge`. `PartialEq`
 /// lets the state subscribers skip the blocking tray round-trip when an
 /// emit (volume step, seek, queue edit) didn't change anything the tray
 /// renders.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TraySnapshot {
+    /// Included in equality so a language switch updates an otherwise idle tray.
+    pub labels: TrayMenuLabels,
     /// The current track's title, or `None` when nothing is loaded.
     pub track_title: Option<String>,
     /// The current track's artist, or `None` when unknown or nothing is loaded.
@@ -88,8 +112,8 @@ impl TraySnapshot {
     }
 
     /// Label for the play/pause menu row.
-    fn play_pause_label(&self) -> &'static str {
-        if self.is_playing { "Pause" } else { "Play" }
+    fn play_pause_label(&self) -> &str {
+        if self.is_playing { &self.labels.pause } else { &self.labels.play }
     }
 }
 

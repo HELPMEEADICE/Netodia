@@ -16,7 +16,7 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 use netodia_core::error::describe;
 
-use super::{TrayAction, TraySnapshot};
+use super::{TrayAction, TrayMenuLabels, TraySnapshot};
 
 // Stable menu-item ids — `muda` delivers `MenuEvent { id }` globally, so the
 // event handler routes by id.
@@ -26,7 +26,7 @@ const ID_PREV: &str = "netodia.tray.previous";
 const ID_SHOW_HIDE: &str = "netodia.tray.showhide";
 const ID_QUIT: &str = "netodia.tray.quit";
 
-/// UI-thread-owned tray state. The four menu items are retained so `update` can rewrite the
+/// UI-thread-owned tray state. The menu items are retained so `update` can rewrite the
 /// labels and follow the transport's own enabled state.
 struct TrayState {
     tray: TrayIcon,
@@ -34,6 +34,8 @@ struct TrayState {
     play_pause_item: MenuItem,
     next_item: MenuItem,
     prev_item: MenuItem,
+    show_hide_item: MenuItem,
+    quit_item: MenuItem,
 }
 
 thread_local! {
@@ -46,16 +48,16 @@ thread_local! {
 /// on Windows the icon's hidden window is pumped by the winit message loop).
 /// Returns `false` when the platform refused to create it — the app then
 /// runs without a tray.
-pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
+pub fn init(action_tx: mpsc::Sender<TrayAction>, labels: &TrayMenuLabels) -> bool {
     let menu = Menu::new();
     let track_item = MenuItem::new("Netodia", false, None);
-    let play_pause_item = MenuItem::with_id(ID_PLAY_PAUSE, "Play", true, None);
+    let play_pause_item = MenuItem::with_id(ID_PLAY_PAUSE, &labels.play, true, None);
     // Both start disabled, matching `TraySnapshot::default()`: nothing is playing yet, so there
     // is nowhere to skip to until the first snapshot lands.
-    let next_item = MenuItem::with_id(ID_NEXT, "Next", false, None);
-    let prev_item = MenuItem::with_id(ID_PREV, "Previous", false, None);
-    let show_hide_item = MenuItem::with_id(ID_SHOW_HIDE, "Show / Hide Window", true, None);
-    let quit_item = MenuItem::with_id(ID_QUIT, "Quit Netodia", true, None);
+    let next_item = MenuItem::with_id(ID_NEXT, &labels.next, false, None);
+    let prev_item = MenuItem::with_id(ID_PREV, &labels.previous, false, None);
+    let show_hide_item = MenuItem::with_id(ID_SHOW_HIDE, &labels.show_hide, true, None);
+    let quit_item = MenuItem::with_id(ID_QUIT, &labels.quit, true, None);
     let sep_a = PredefinedMenuItem::separator();
     let sep_b = PredefinedMenuItem::separator();
 
@@ -103,7 +105,15 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     }));
 
     TRAY.with_borrow_mut(|slot| {
-        *slot = Some(TrayState { tray, track_item, play_pause_item, next_item, prev_item });
+        *slot = Some(TrayState {
+            tray,
+            track_item,
+            play_pause_item,
+            next_item,
+            prev_item,
+            show_hide_item,
+            quit_item,
+        });
     });
     log::info!("System tray registered");
     true
@@ -121,7 +131,7 @@ fn icon_for() -> Option<Icon> {
     }
 }
 
-/// Push a fresh snapshot — relabels the play/pause + track rows, follows the transport on the
+/// Push a fresh snapshot — relabels every menu row, follows the transport on the
 /// skip rows, and rewrites the tooltip. Must be called on the UI thread. No-op if the tray was
 /// never created or has been shut down.
 pub fn update(snapshot: &TraySnapshot) {
@@ -129,6 +139,10 @@ pub fn update(snapshot: &TraySnapshot) {
         let Some(state) = slot else { return };
         state.track_item.set_text(snapshot.menu_track_label());
         state.play_pause_item.set_text(snapshot.play_pause_label());
+        state.next_item.set_text(&snapshot.labels.next);
+        state.prev_item.set_text(&snapshot.labels.previous);
+        state.show_hide_item.set_text(&snapshot.labels.show_hide);
+        state.quit_item.set_text(&snapshot.labels.quit);
         state.next_item.set_enabled(snapshot.has_next);
         state.prev_item.set_enabled(snapshot.has_previous);
         if let Err(e) = state.tray.set_tooltip(Some(snapshot.tooltip())) {

@@ -21,6 +21,15 @@ export enum DragRegion { none, titlebar, miniplayer }
 // `restart-tray` and `restart-backdrop` mirror it, so the gate each reads once at startup
 // re-evaluates: `install_ui`'s tray install and `boot::ui_setup::chrome::apply_backdrop_style`.
 export global WindowChrome {
+    // Rust passes these resolved strings to the native tray, including after a locale switch.
+    out property <string> tray-play-label: @tr("Play");
+    out property <string> tray-pause-label: @tr("Pause");
+    // Translators: Skip to the next track in the playback queue.
+    out property <string> tray-next-label: @tr("Next track");
+    out property <string> tray-previous-label: @tr("Previous");
+    out property <string> tray-show-hide-label: @tr("Show / Hide Window");
+    out property <string> tray-quit-label: @tr("Quit Netodia");
+
     in property <bool> is-maximized;
 
     // What the OS frame adds to the client area on each axis, measured as the step the client takes
