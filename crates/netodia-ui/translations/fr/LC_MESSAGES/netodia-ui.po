@@ -2030,10 +2030,6 @@ msgstr "Titres similaires"
 msgid "Now Playing"
 msgstr "Lecture en cours"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Arrêter"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Pistes"

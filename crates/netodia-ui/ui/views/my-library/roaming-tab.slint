@@ -3,7 +3,6 @@ import { Theme } from "../../theme.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { LibraryEntryCard } from "entry-card.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
-import { ActionPill, PillButton } from "../../components/action-pill.slint";
 
 export component RoamingTab inherits Rectangle {
     sv := ScrollView {
@@ -44,9 +43,6 @@ export component RoamingTab inherits Rectangle {
                 text: Playlists.roaming-error;
                 color: Theme.subtext0;
                 wrap: word-wrap;
-            }
-            if Playlists.roaming-mode >= 0: ActionPill {
-                PillButton { icon: "stop"; text: @tr("Stop"); clicked => { Playlists.stop-roaming(); } }
             }
         }
     }

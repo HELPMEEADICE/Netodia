@@ -15,6 +15,10 @@ export global Player {
         ? "‎" + (root.vm.track.artist == "" ? @tr("Unknown artist") : root.vm.track.artist)
         : "—";
     out property <string> source-tertiary: root.vm.has_track && root.vm.track.album != "" ? "‎" + root.vm.track.album : "";
+    out property <bool> can-open-source-artist: root.vm.has_track && root.vm.track.artist != "";
+    out property <bool> can-open-source-album: root.vm.has_track && root.vm.track.album != "";
+    callback open-source-artist();
+    callback open-source-album();
     // Projected out of `vm` for a *Rust* reader, which is the half a binding cannot help with:
     // reading a struct property from Rust clones the whole of it, and the lyrics panel's follow
     // wants these two on a 33 ms tick. Derived here so the clone happens once per publish rather

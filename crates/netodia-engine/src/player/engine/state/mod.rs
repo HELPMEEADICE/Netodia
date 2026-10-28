@@ -19,8 +19,6 @@ pub use summary_sync::{any_tracked, sync_current_track_if_in, sync_track_summari
 pub use transport::{ReleaseDecision, play_track_inner, resume_from_stopped, stop_end_of_queue};
 pub use view_model::{PlayerViewModel, PlayerViewModelLight, PositionTick, QueueViewModel};
 
-/// Restart-from-beginning threshold for Previous command (ms).
-pub const RESTART_THRESHOLD_MS: u64 = 3000;
 /// Maximum volume level (percent) stored in `PlayerState` and reachable from the
 /// UI. Playback amplitude tops out at unity gain (see [`volume_to_amplitude`]),
 /// so this is the true ceiling — there is no boost band above it.

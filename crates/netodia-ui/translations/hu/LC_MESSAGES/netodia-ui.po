@@ -2032,10 +2032,6 @@ msgstr "Hasonló dalok"
 msgid "Now Playing"
 msgstr "Most játszott"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Leállítás"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Számok"

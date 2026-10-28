@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
+import { SourceMetaLink } from "../components/now-playing/source-meta-link.slint";
 import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { Settings } from "../settings.slint";
@@ -67,9 +68,8 @@ export component NowPlayingBar inherits Rectangle {
 
         // A Rectangle rather than a layout so it can clip bidi overflow, and the inner text
         // column takes `horizontal-stretch: 1` so `overflow: elide` fires at all — the
-        // `track-list-row.slint` title-cell pattern. **The whole cell is a button**, toggling
-        // the full-screen view, so a second click closes it; its TouchArea is declared last so
-        // it sits above the artwork and text.
+        // `track-list-row.slint` title-cell pattern. The background target toggles the full-screen
+        // view; artist and album links above it have their own targets.
         track-info-cell := Rectangle {
             width: clamp(root.bar-w * 0.25, 120px, 200px);
             // Redundant, but spelled out beside the columns below that genuinely need it.
@@ -91,103 +91,105 @@ export component NowPlayingBar inherits Rectangle {
                 easing: cubic-bezier(0.34, 1.56, 0.64, 1);
             }
 
-            // A low-alpha accent fill behind the content. The vertical inset keeps it
-            // off the bar's top and bottom edges, so it reads as a discrete button
-            // rather than a full-height swap; the x/y recentring is what makes it pulse
-            // in place instead of drifting toward a corner.
-            Rectangle {
-                width: parent.width * track-info-cell.press-scale;
-                height: (parent.height - 12px) * track-info-cell.press-scale;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                border-radius: Theme.radius-md;
-                background: track-info-touch.has-hover && track-info-cell.has-source
-                    ? Theme.accent.with-alpha(0.12)
-                    : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-            }
-
-            // Shares `press-scale` with the fill, so the row inside contracts toward the
-            // cell's centre. Without the wrapper, scaling per element anchors each to
-            // its own left edge and the block collapses leftward instead of pulsing.
-            Rectangle {
-                width: parent.width * track-info-cell.press-scale;
-                height: parent.height * track-info-cell.press-scale;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-
-                HorizontalLayout {
-                    // Nests the content inside the hover fill, which spans the wrapper's
-                    // full width — without it the tile sits flush against its edge.
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: clamp(root.bar-w * 0.015, 6px, 10px);
-                    alignment: start;
-
-                    VerticalLayout {
-                        alignment: center;
-                        SourceArtwork {
-                            tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
-                            // The frame stays fixed; the cover scales within it.
-                            cover-scale: track-info-touch.has-hover && track-info-cell.has-source
-                                ? 1.15
-                                : 1.0;
-                        }
-                    }
-
-                    VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
-
-                        VerticalLayout {
-                            spacing: 2px;
-
-                            // Both lines come off `Player`, which adds the LRM that keeps elide's
-                            // `…` on the right edge for RTL scripts.
-                            Text {
-                                text: Player.source-title;
-                                color: Theme.text;
-                                font-size: Theme.font-size-sm;
-                                font-weight: 500;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: Player.source-subtitle;
-                                color: Theme.text;
-                                font-size: 11px;
-                                overflow: elide;
-                            }
-                            Text {
-                                // The album for a track.
-                                text: Player.source-tertiary;
-                                // All three lines are `Theme.text`; size and weight are
-                                // what separate them. Artist and album were `subtext0`
-                                // and `overlay1` — the latter isn't even a text rung —
-                                // which put the album two steps under the title in a
-                                // bar this short.
-                                color: Theme.text;
-                                font-size: 11px;
-                                overflow: elide;
-                                visible: Player.source-tertiary != "";
-                            }
-                        }
-                    }
-                }
-            }
-
             track-info-touch := TouchArea {
                 mouse-cursor: track-info-cell.has-source ? pointer : default;
                 enabled: track-info-cell.has-source;
-                // The edge is owed on the *close* half of this toggle: the view under
-                // Now Playing is a fresh `ViewTransition` mount, and left unwritten it
-                // enters from whatever the last drill or back put there. Set
-                // unconditionally, since opening reads nothing — that branch hard-codes
-                // `above`.
                 clicked => {
                     Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = !Nav.now-playing-open;
                 }
+
+                // A low-alpha accent fill behind the content. The vertical inset keeps it
+                // off the bar's top and bottom edges, so it reads as a discrete button
+                // rather than a full-height swap; the x/y recentring is what makes it pulse
+                // in place instead of drifting toward a corner.
+                Rectangle {
+                    width: parent.width * track-info-cell.press-scale;
+                    height: (parent.height - 12px) * track-info-cell.press-scale;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: Theme.radius-md;
+                    background: track-info-touch.has-hover && track-info-cell.has-source
+                        ? Theme.accent.with-alpha(0.12)
+                        : transparent;
+                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                }
+
+                // Shares `press-scale` with the fill, so the row inside contracts toward the
+                // cell's centre. Without the wrapper, scaling per element anchors each to
+                // its own left edge and the block collapses leftward instead of pulsing.
+                Rectangle {
+                    width: parent.width * track-info-cell.press-scale;
+                    height: parent.height * track-info-cell.press-scale;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+
+                    HorizontalLayout {
+                        // Nests the content inside the hover fill, which spans the wrapper's
+                        // full width — without it the tile sits flush against its edge.
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: clamp(root.bar-w * 0.015, 6px, 10px);
+                        alignment: start;
+
+                        VerticalLayout {
+                            alignment: center;
+                            SourceArtwork {
+                                tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
+                                // The frame stays fixed; the cover scales within it.
+                                cover-scale: track-info-touch.has-hover && track-info-cell.has-source
+                                    ? 1.15
+                                    : 1.0;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+
+                            VerticalLayout {
+                                spacing: 2px;
+
+                                // Both lines come off `Player`, which adds the LRM that keeps elide's
+                                // `…` on the right edge for RTL scripts.
+                                Text {
+                                    text: Player.source-title;
+                                    color: Theme.text;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: 500;
+                                    overflow: elide;
+                                }
+                                SourceMetaLink {
+                                    text: Player.source-subtitle;
+                                    link-enabled: Player.can-open-source-artist;
+                                    activated => { Player.open-source-artist(); }
+                                    idle-color: Theme.text;
+                                    hover-color: Theme.accent;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                                SourceMetaLink {
+                                    // The album for a track.
+                                    text: Player.source-tertiary;
+                                    link-enabled: Player.can-open-source-album;
+                                    activated => { Player.open-source-album(); }
+                                    // All three lines are `Theme.text`; size and weight are
+                                    // what separate them. Artist and album were `subtext0`
+                                    // and `overlay1` — the latter isn't even a text rung —
+                                    // which put the album two steps under the title in a
+                                    // bar this short.
+                                    idle-color: Theme.text;
+                                    hover-color: Theme.accent;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                    visible: Player.source-tertiary != "";
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
         }
 
         // Transport. A `VerticalLayout` defaults to stretch 1, so without the explicit 0

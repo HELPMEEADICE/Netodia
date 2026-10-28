@@ -149,6 +149,40 @@ fn ids(queue: &QueueState) -> Vec<i64> {
     queue.tracks_in_play_order().iter().map(|track| track.id).collect()
 }
 
+#[tokio::test]
+async fn roaming_switch_reserves_once_and_stop_rejects_the_delayed_batch()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::cloud_playback::CloudPlayback;
+    use crate::state::fixtures::TestPlayback;
+    use netodia_engine::player::engine::state::lock_state;
+    use netodia_engine::player::engine::types::PlaybackStatus;
+
+    let fixture = TestPlayback::empty().await?;
+    let playback = CloudPlayback::new(
+        crate::cloud::tests::service_without_network_for_test(),
+        reqwest::Client::new(),
+        fixture.tmp.path().join("artwork"),
+        fixture.ctx.engine.clone(),
+        fixture.ctx.player_state.clone(),
+        fixture.ctx.sinks.clone(),
+    );
+    lock_state(&fixture.ctx.player_state).status = PlaybackStatus::Playing;
+    let old = playback.reserve_roaming_playback();
+    let current = playback.reserve_roaming_playback();
+
+    assert_eq!(lock_state(&fixture.ctx.player_state).status, PlaybackStatus::Stopped);
+    assert!(!fixture.ctx.engine.is_playback_request_current(old.1));
+    assert!(fixture.ctx.engine.is_playback_request_current(current.1));
+    assert!(!playback.play_roaming_queue(Vec::new(), old.0, old.1).await?.started);
+    assert!(fixture.ctx.engine.is_playback_request_current(current.1));
+
+    crate::library::playback::player_stop(&fixture.ctx)?;
+
+    assert!(!playback.play_roaming_queue(Vec::new(), current.0, current.1).await?.started);
+    assert_eq!(lock_state(&fixture.ctx.player_state).status, PlaybackStatus::Stopped);
+    Ok(())
+}
+
 #[test]
 fn play_next_preserves_large_ids_and_the_batch_order() {
     let mut queue = QueueState::default();

@@ -22,7 +22,7 @@ pub fn set_lyrics_online_enabled(paths: &Paths, enabled: bool) -> Result<(), App
     })
 }
 
-/// Persist whether the panel draws the romanization under each line.
+/// Persist whether the panel draws readings and generates them for sheets with none of their own.
 ///
 /// **The one writer, and it has two callers**: the Settings card and the Now Playing menu. A
 /// second `mutate_settings` beside it is how the two would come to disagree about the field's

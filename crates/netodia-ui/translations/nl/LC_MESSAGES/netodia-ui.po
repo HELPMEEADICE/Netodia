@@ -2030,10 +2030,6 @@ msgstr "Vergelijkbare nummers"
 msgid "Now Playing"
 msgstr "Wordt afgespeeld"
 
-#: ui/views/my-library/roaming-tab.slint
-msgid "Stop"
-msgstr "Stoppen"
-
 #: ui/views/my-library/tab-pills.slint
 msgid "Tracks"
 msgstr "Nummers"
