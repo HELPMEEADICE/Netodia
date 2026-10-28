@@ -54,7 +54,6 @@ export component OverflowMenu inherits Rectangle {
     property <int> overflow-count:
         (Settings.overflow-favorite && Player.can-favorite ? 1 : 0)
         + (Settings.overflow-repeat ? 1 : 0)
-        + (Settings.overflow-shuffle ? 1 : 0)
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0)
         + ((SignalPathUi.chip-shown && Settings.overflow-quality) ? 1 : 0);
@@ -303,16 +302,9 @@ export component OverflowMenu inherits Rectangle {
                     clicked => { Player.toggle-favorite(); root.dismiss(); }
                 }
                 if Settings.overflow-repeat: OverflowRow {
-                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-                    label: @tr("Repeat");
-                    active: Player.queue.repeat_mode != "off";
-                    clicked => { Player.cycle-repeat(); root.dismiss(); }
-                }
-                if Settings.overflow-shuffle: OverflowRow {
-                    icon: "shuffle";
-                    label: @tr("Shuffle");
-                    active: Player.queue.shuffle;
-                    clicked => { Player.toggle-shuffle(); root.dismiss(); }
+                    icon: Player.playback-mode-icon;
+                    label: Player.playback-mode-tooltip;
+                    clicked => { Player.cycle-playback-mode(); root.dismiss(); }
                 }
                 if WindowChrome.always-on-top-supported && Settings.overflow-pin: OverflowRow {
                     icon: "push_pin";

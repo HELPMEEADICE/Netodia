@@ -113,19 +113,12 @@ export component OverflowMenuSection inherits Rectangle {
                     OverflowCheckCell {
                         id: "repeat";
                         icon: "repeat";
-                        label: @tr("Repeat");
+                        label: @tr("Playback");
                         checked <=> Settings.overflow-repeat;
                         toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
                     }
                 }
                 Row {
-                    OverflowCheckCell {
-                        id: "shuffle";
-                        icon: "shuffle";
-                        label: @tr("Shuffle");
-                        checked <=> Settings.overflow-shuffle;
-                        toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
-                    }
                     OverflowCheckCell {
                         id: "pin";
                         icon: "push_pin";
@@ -133,8 +126,6 @@ export component OverflowMenuSection inherits Rectangle {
                         checked <=> Settings.overflow-pin;
                         toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
                     }
-                }
-                Row {
                     OverflowCheckCell {
                         id: "queue";
                         icon: "queue_music";
@@ -142,6 +133,8 @@ export component OverflowMenuSection inherits Rectangle {
                         checked <=> Settings.overflow-queue;
                         toggled => { Settings.overflow-buttons-changed(self.id, self.checked); }
                     }
+                }
+                Row {
                     OverflowCheckCell {
                         id: "quality";
                         icon: "graphic_eq";

@@ -714,9 +714,7 @@ msgid "Play"
 msgstr "Відтворити"
 
 #: ui/components/grid/card-context-menu.slint
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
-#: ui/views/settings/overflow-menu-section.slint
 msgid "Shuffle"
 msgstr "Перемішати"
 
@@ -882,31 +880,6 @@ msgstr "Фон з обкладинки: увімк."
 #: ui/layout/now-playing-bar.slint
 msgid "Unfavorite"
 msgstr "Прибрати з обраного"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: off"
-msgstr "Перемішування: вимк."
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: on"
-msgstr "Перемішування: увімк."
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: off"
-msgstr "Повтор: вимк."
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: one"
-msgstr "Повтор: один трек"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: all"
-msgstr "Повтор: усі"
 
 #: ui/components/now-playing/flyout-presets.slint
 #: ui/components/now-playing/overflow-menu.slint
@@ -1081,11 +1054,6 @@ msgid "Very high"
 msgstr "Дуже висока"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/overflow-menu-section.slint
-msgid "Repeat"
-msgstr "Повтор"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
@@ -1235,7 +1203,6 @@ msgid "Skip"
 msgstr "Пропустити"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-#: ui/views/favorites/cloud-entity-detail-view.slint
 msgid "Back"
 msgstr "Назад"
 
@@ -1352,8 +1319,8 @@ msgstr[0] "{n} в обраному"
 msgstr[1] "{n} в обраному"
 msgstr[2] "{n} в обраному"
 
-#: ui/globals/dialog.slint ui/views/my-library-view.slint
-#: ui/views/search-view.slint
+#: ui/globals/dialog.slint ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/search-view.slint
 msgid "Artists"
 msgstr "Виконавці"
 
@@ -1461,6 +1428,22 @@ msgstr "Попередній"
 #: ui/globals/player.slint
 msgid "Next (hold to fast-forward)"
 msgstr "Наступний (утримуйте, щоб перемотати вперед)"
+
+#: ui/globals/player.slint
+msgid "Shuffle: on"
+msgstr "Перемішування: увімк."
+
+#: ui/globals/player.slint ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "За порядком"
+
+#: ui/globals/player.slint
+msgid "Repeat: all"
+msgstr "Повтор: усі"
+
+#: ui/globals/player.slint
+msgid "Repeat: one"
+msgstr "Повтор: один трек"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1805,9 +1788,10 @@ msgstr "Картки"
 msgid "List view"
 msgstr "Список"
 
-#: ui/views/favorites-view.slint ui/views/my-library-view.slint
-#: ui/views/my-library/artist-detail.slint ui/views/my-library/tab-pills.slint
-#: ui/views/search-view.slint
+#: ui/views/favorites-view.slint
+#: ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
 msgid "Albums"
 msgstr "Альбоми"
 
@@ -2057,10 +2041,6 @@ msgid "Tracks"
 msgstr "Треки"
 
 #: ui/views/my-library/tab-pills.slint
-msgid "In order"
-msgstr "За порядком"
-
-#: ui/views/my-library/tab-pills.slint
 msgid "Edit artwork"
 msgstr "Змінити обкладинку"
 
@@ -2188,7 +2168,8 @@ msgstr "Інтерфейс"
 msgid "Library"
 msgstr "Медіатека"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings-view.slint ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Відтворення"

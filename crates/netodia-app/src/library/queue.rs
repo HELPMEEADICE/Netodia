@@ -220,6 +220,50 @@ pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Cycle sequential → repeat all → repeat one → shuffle → sequential.
+pub fn queue_cycle_playback_mode(state: &AppState) -> Result<(), AppError> {
+    cycle_playback_mode(&state.player_state, &state.sinks);
+    let player_state = Arc::clone(&state.player_state);
+    state.persist_blocking("persist playback mode", move |paths| {
+        write_playback_mode(paths, &player_state)
+    });
+    Ok(())
+}
+
+fn write_playback_mode(paths: &Paths, player_state: &PlayerStateHandle) -> AppResult<()> {
+    mutate_settings(paths, |settings| {
+        let player = lock_state(player_state);
+        settings.queue.repeat_mode = player.queue.repeat_mode;
+        settings.queue.shuffle_enabled = player.queue.shuffle_enabled;
+    })
+}
+
+fn cycle_playback_mode(player_state: &PlayerStateHandle, sinks: &PlayerSinks) {
+    with_state_emit(player_state, sinks, |s| {
+        if s.queue.shuffle_enabled {
+            s.queue.unshuffle();
+            s.queue.set_repeat_mode(RepeatMode::Off);
+        } else {
+            match s.queue.repeat_mode {
+                RepeatMode::Off => s.queue.set_repeat_mode(RepeatMode::All),
+                RepeatMode::All => s.queue.set_repeat_mode(RepeatMode::One),
+                RepeatMode::One => {
+                    s.queue.set_repeat_mode(RepeatMode::Off);
+                    shuffle_inline(s);
+                    // Keep the preference even before tracks are added. Starting a new
+                    // playlist already applies shuffle when this flag is enabled.
+                    s.queue.shuffle_enabled = true;
+                }
+            }
+        }
+        log::debug!(
+            "queue: playback mode → repeat {:?}, shuffle {}",
+            s.queue.repeat_mode,
+            s.queue.shuffle_enabled
+        );
+    });
+}
+
 pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
     let new_mode = cycle_repeat(&state.player_state, &state.sinks);
     log::debug!("queue: repeat → {new_mode:?}");

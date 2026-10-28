@@ -712,9 +712,7 @@ msgid "Play"
 msgstr "Abspielen"
 
 #: ui/components/grid/card-context-menu.slint
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/my-library/tab-pills.slint ui/views/recently-played-view.slint
-#: ui/views/settings/overflow-menu-section.slint
 msgid "Shuffle"
 msgstr "Zufallswiedergabe"
 
@@ -880,31 +878,6 @@ msgstr "Album-Hintergrund: An"
 #: ui/layout/now-playing-bar.slint
 msgid "Unfavorite"
 msgstr "Kein Favorit"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: off"
-msgstr "Zufallswiedergabe: Aus"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Shuffle: on"
-msgstr "Zufallswiedergabe: An"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: off"
-msgstr "Wiederholen: Aus"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: one"
-msgstr "Wiederholen: Eins"
-
-#: ui/components/mini-player/mini-controls.slint
-#: ui/layout/now-playing-bar.slint
-msgid "Repeat: all"
-msgstr "Wiederholen: Alle"
 
 #: ui/components/now-playing/flyout-presets.slint
 #: ui/components/now-playing/overflow-menu.slint
@@ -1079,11 +1052,6 @@ msgid "Very high"
 msgstr "Sehr hoch"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/overflow-menu-section.slint
-msgid "Repeat"
-msgstr "Wiederholen"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
@@ -1233,7 +1201,6 @@ msgid "Skip"
 msgstr "Überspringen"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-#: ui/views/favorites/cloud-entity-detail-view.slint
 msgid "Back"
 msgstr "Zurück"
 
@@ -1349,8 +1316,8 @@ msgid_plural "{n} favorites"
 msgstr[0] "{n} Favorit"
 msgstr[1] "{n} Favoriten"
 
-#: ui/globals/dialog.slint ui/views/my-library-view.slint
-#: ui/views/search-view.slint
+#: ui/globals/dialog.slint ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/search-view.slint
 msgid "Artists"
 msgstr "Künstler"
 
@@ -1455,6 +1422,22 @@ msgstr "Vorheriger"
 #: ui/globals/player.slint
 msgid "Next (hold to fast-forward)"
 msgstr "Nächster (halten zum Vorspulen)"
+
+#: ui/globals/player.slint
+msgid "Shuffle: on"
+msgstr "Zufallswiedergabe: An"
+
+#: ui/globals/player.slint ui/views/my-library/tab-pills.slint
+msgid "In order"
+msgstr "In Reihenfolge"
+
+#: ui/globals/player.slint
+msgid "Repeat: all"
+msgstr "Wiederholen: Alle"
+
+#: ui/globals/player.slint
+msgid "Repeat: one"
+msgstr "Wiederholen: Eins"
 
 #: ui/globals/signal-path.slint
 msgid "Nothing is playing"
@@ -1791,9 +1774,10 @@ msgstr "Kartenansicht"
 msgid "List view"
 msgstr "Listenansicht"
 
-#: ui/views/favorites-view.slint ui/views/my-library-view.slint
-#: ui/views/my-library/artist-detail.slint ui/views/my-library/tab-pills.slint
-#: ui/views/search-view.slint
+#: ui/views/favorites-view.slint
+#: ui/views/favorites/cloud-entity-detail-view.slint
+#: ui/views/my-library-view.slint ui/views/my-library/artist-detail.slint
+#: ui/views/my-library/tab-pills.slint ui/views/search-view.slint
 msgid "Albums"
 msgstr "Alben"
 
@@ -2040,10 +2024,6 @@ msgid "Tracks"
 msgstr "Lieder"
 
 #: ui/views/my-library/tab-pills.slint
-msgid "In order"
-msgstr "In Reihenfolge"
-
-#: ui/views/my-library/tab-pills.slint
 msgid "Edit artwork"
 msgstr "Bild bearbeiten"
 
@@ -2171,7 +2151,8 @@ msgstr "Oberfläche"
 msgid "Library"
 msgstr "Bibliothek"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
+#: ui/views/settings-view.slint ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Wiedergabe"

@@ -272,6 +272,13 @@ fn wire_transport(player: &Player<'_>, state: &AppState) {
         library::queue::queue_toggle_shuffle
     );
     wire_sync!(player, on_cycle_repeat, state, "cycle_repeat", library::queue::queue_cycle_repeat);
+    wire_sync!(
+        player,
+        on_cycle_playback_mode,
+        state,
+        "cycle_playback_mode",
+        library::queue::queue_cycle_playback_mode
+    );
 }
 
 /// Hold the slider at the requested position until the backend reports a

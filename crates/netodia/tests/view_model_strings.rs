@@ -3,8 +3,8 @@
 //!
 //! Two of them: `RepeatMode` and `PlaybackStatus` reach `PlayerViewModel` through
 //! `ui::shell::bridge` as whatever `as_str` returns. Nothing on either side is checked by a
-//! compiler, and neither failure is loud: a renamed `RepeatMode::Off` leaves the repeat button lit
-//! in every state, because the sheet asks `!= "off"`.
+//! compiler, and neither failure is loud: a renamed `RepeatMode::Off` leaves the playback-mode
+//! button showing the repeat icon in sequential mode, because the shared icon asks `== "off"`.
 //!
 //! Here rather than beside either tree, and this is the case `CLAUDE.md` draws the line for: the
 //! claim is about two trees at once, so neither the enum's own suite nor a `.slint` pin can hold
@@ -12,7 +12,7 @@
 //!
 //! The direction is deliberate. **Every literal the sheet compares against must be one the enum
 //! can produce**, not the reverse: `RepeatMode::All` is legitimately never named in a comparison,
-//! the sheet distinguishing only "one" from "not off". A rename on *either* side still fails it,
+//! the shared icon and tooltip distinguishing "off", "one", and the remaining mode. A rename on *either* side still fails it,
 //! since renaming the Rust variant is what makes the sheet's literal unproducible.
 
 use std::collections::BTreeSet;
@@ -24,7 +24,8 @@ use netodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// inventory: what they guard is a walk that stopped matching, which every assertion below
 /// would otherwise pass. Deliberately loose, `status` most of all — its comparisons sit in two
 /// bindings an ordinary edit could drop either of, so anything but 1 is a floor that fails on one.
-const MIN_REPEAT_SITES: usize = 6;
+// Repeat comparisons live in shared icon/tooltip bindings, rather than each transport button.
+const MIN_REPEAT_SITES: usize = 2;
 const MIN_STATUS_SITES: usize = 1;
 
 /// The literal `src` compares `.field` against at `at`, where `at` is the offset of the `.`.
