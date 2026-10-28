@@ -178,6 +178,10 @@ pub(crate) struct LyricsUi {
     /// Which way the romanization toggle stood when the model was last written, so a re-measure
     /// can tell a flip from a width that moved and publish only for the former.
     published_romanization: Cell<bool>,
+    /// Invalidates automatic-reading results after a new request or a sheet being handed back.
+    reading_request: Cell<u64>,
+    /// The whole sheet has readings, including any lines beyond the panel's row cap.
+    has_readings: Cell<bool>,
     /// The last position the bridge published, and when it was seen. Together they interpolate a
     /// roughly one-second tick into something a highlight can follow.
     anchor_ms: Cell<i32>,
@@ -223,6 +227,8 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         metrics: Metrics::from_global(&global),
         width: Cell::new(ASSUMED_WIDTH),
         published_romanization: Cell::new(state.lyrics_romanization_shown.get()),
+        reading_request: Cell::new(0),
+        has_readings: Cell::new(false),
         anchor_ms: Cell::new(0),
         anchor_at: Cell::new(Instant::now()),
         pinned: Cell::new(None),
@@ -268,14 +274,16 @@ fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     global.set_romanization_shown(state.lyrics_romanization_shown.get());
     {
         let persist = lyrics_settings::romanization_handler(ui, state);
+        let state = state.clone();
         let weak = ui.as_weak();
         let ly_republish = ly.clone();
         global.on_set_romanization_shown(move |shown| {
             persist(shown);
-            // Nothing is resolved again: the rows already carry the romanization, so the flip is a
-            // re-measure of the sheet on screen against the heights it is now drawn at.
             if let Some(ui) = weak.upgrade() {
                 follow::republish(&ui, &ly_republish);
+                if shown {
+                    sheet::ensure_readings(&ui, &state, &ly_republish);
+                }
             }
         });
     }

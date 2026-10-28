@@ -302,6 +302,65 @@ impl CloudPlayback {
         self.queue_generation.load(Ordering::Acquire)
     }
 
+    /// Stop the outgoing mode and reserve its replacement before any async work is spawned.
+    /// Updating player state prevents the EOS monitor from advancing the old queue mid-switch.
+    pub fn reserve_roaming_playback(&self) -> (u64, u64) {
+        let _exec = self.player_state.lock_exec();
+        self.engine.stop();
+        with_state_emit(&self.player_state, &self.sinks, |state| {
+            state.status = PlaybackStatus::Stopped;
+            state.position_ms = 0;
+        });
+        let queue = self.queue_generation.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
+        (queue, self.engine.reserve_playback_request())
+    }
+
+    /// Start a roaming batch using the reservation made at the user's click, never a new one.
+    pub(crate) async fn play_roaming_queue(
+        &self,
+        songs: Vec<Song>,
+        queue_generation: u64,
+        playback_generation: u64,
+    ) -> AppResult<CloudPlaybackResult> {
+        if self.queue_generation() != queue_generation
+            || !self.engine.is_playback_request_current(playback_generation)
+        {
+            return Ok(CloudPlaybackResult { started: false, trial: false });
+        }
+        let selected_id =
+            songs.first().ok_or_else(|| AppError::Queue("暂时没有可播放的漫游歌曲".to_owned()))?.id;
+        // Like ordinary cloud playlists, warm membership before building player/queue hearts.
+        // A failed lookup must not prevent playback; a newer transport action must still win.
+        if self.cloud.cached_is_liked(selected_id).is_none() {
+            let _ = self.cloud.liked_ids().await;
+        }
+        if self.queue_generation() != queue_generation
+            || !self.engine.is_playback_request_current(playback_generation)
+        {
+            return Ok(CloudPlaybackResult { started: false, trial: false });
+        }
+        let tracks = songs
+            .into_iter()
+            .map(|song| {
+                let liked = self.cloud.cached_is_liked(song.id).unwrap_or(false);
+                Arc::new(track_summary(song, None, liked))
+            })
+            .collect();
+        let (volume, speed) = {
+            let state = lock_state(&self.player_state);
+            (state.effective_volume(), state.playback_speed)
+        };
+        self.start_cloud_queue(
+            playback_generation,
+            tracks,
+            selected_id,
+            CloudQueueShuffle::Ordered,
+            volume,
+            speed,
+        )
+        .await
+    }
+
     /// Reports whether the stopped player is waiting for a queued cloud track to load.
     pub fn is_queue_track_loading(&self) -> bool {
         let generation = self.pending_queue_playback_generation.load(Ordering::Acquire);

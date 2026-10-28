@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use super::volume_to_amplitude;
-use super::{MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerAction, PlayerState, RESTART_THRESHOLD_MS};
+use super::{MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerAction, PlayerState};
 use crate::player::engine::types::PlaybackStatus;
 use netodia_core::entities::track::TrackSummary;
 use netodia_playback::player::playback::crossfade::CrossfadeDecision;
@@ -147,13 +147,9 @@ impl PlayerState {
         }
     }
 
-    /// Build actions for previous-track command.
+    /// Step back in the queue regardless of the current playback position.
     pub fn build_previous_actions(&mut self) -> Vec<PlayerAction> {
         let was_paused = self.status == PlaybackStatus::Paused;
-
-        if self.position_ms > RESTART_THRESHOLD_MS {
-            return self.build_move_to_actions(0);
-        }
 
         if let Some(track) = self.queue.previous().cloned() {
             let mut actions = play_track_inner(self, track, None);

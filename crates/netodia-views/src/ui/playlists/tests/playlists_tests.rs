@@ -8,7 +8,7 @@
 use super::detail::{POSITION_FIELD, is_manual_order, sort_playlist_tracks};
 use super::*;
 use netodia_core::entities::track::TrackListRow;
-use netodia_testkit::code_tokens;
+use netodia_testkit::{block_after, code_tokens};
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../netodia-ui/ui/components/track-list/draggable-track-list.slint");
@@ -26,6 +26,29 @@ const PLAYLIST_GRID: &str =
 const PLAYLIST_DETAIL_GLOBAL: &str =
     include_str!("../../../../../netodia-ui/ui/globals/playlists.slint");
 const GRID_CALLBACKS: &str = include_str!("../callbacks/grid.rs");
+const ENTRY_CARD: &str =
+    include_str!("../../../../../netodia-ui/ui/views/my-library/entry-card.slint");
+
+/// Entry cards start a list with a click; retaining keyboard focus would turn the next Space
+/// into another activation instead of the shared transport toggle.
+#[test]
+fn entry_cards_leave_keyboard_shortcuts_with_the_shared_transport() {
+    let src = code_tokens(ENTRY_CARD);
+    assert!(!src.contains("FocusScope"));
+    assert!(!src.contains("forward-focus:"));
+    assert!(!src.contains("key-pressed("));
+    let touch = block_after(&src, "touch := TouchArea");
+    let clicked = block_after(touch, "clicked =>");
+    assert!(clicked.contains("root.activated();"));
+    let accessible = block_after(&src, "accessible-action-default =>");
+    assert!(accessible.contains("root.activated();"));
+
+    let shortcuts =
+        code_tokens(include_str!("../../../../../netodia-ui/ui/layout/shortcut-scope.slint"));
+    let space = block_after(&shortcuts, "if (ev.text == \" \")");
+    assert!(space.contains("Player.play-pause();"));
+    assert!(space.contains("return accept;"));
+}
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.
@@ -47,6 +70,67 @@ fn playlist(id: i64, name: &str, track_count: i32, updated_at: &str) -> Playlist
 
 fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
     indices.iter().map(|&i| data.playlists[i].name.clone()).collect()
+}
+
+fn cached_categories() -> PlaylistsUi {
+    let ui = PlaylistsUi::new(Arc::new(CoverThumbs::new()), None);
+    ui.grid.categories.lock().insert(
+        0,
+        state::CachedGrid {
+            account_generation: 7,
+            fetched_at: std::time::Instant::now(),
+            data: Arc::new(GridData::new(vec![playlist(1, "Collected", 2, "")])),
+        },
+    );
+    ui.grid.categories.lock().insert(
+        1,
+        state::CachedGrid {
+            account_generation: 7,
+            fetched_at: std::time::Instant::now(),
+            data: Arc::new(GridData::new(vec![playlist(2, "Created", 3, "")])),
+        },
+    );
+    ui
+}
+
+#[test]
+fn switching_categories_restores_each_snapshot_without_releasing_it_on_leave() {
+    let ui = cached_categories();
+    ui.category.store(1, Ordering::Release);
+    assert!(ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(2).map(|row| row.name), Some("Created".to_owned()));
+
+    ui.release_section_state();
+    ui.category.store(0, Ordering::Release);
+    assert!(ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(1).map(|row| row.name), Some("Collected".to_owned()));
+}
+
+#[test]
+fn expired_categories_still_paint_their_snapshot_but_require_refresh()
+-> Result<(), Box<dyn std::error::Error>> {
+    let ui = cached_categories();
+    let expired = std::time::Instant::now()
+        .checked_sub(grid::CATEGORY_CACHE_TTL)
+        .ok_or("monotonic clock cannot represent the expired cache timestamp")?;
+    if let Some(cached) = ui.grid.categories.lock().get_mut(&0) {
+        cached.fetched_at = expired;
+    }
+
+    assert!(!ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(1).map(|row| row.track_count), Some(2));
+    Ok(())
+}
+
+#[test]
+fn another_account_cannot_restore_the_previous_accounts_categories() {
+    let ui = cached_categories();
+    assert!(!ui.restore_category(8));
+    assert!(ui.grid.data.lock().playlists.is_empty());
+
+    ui.clear_account_data();
+    assert!(ui.grid.categories.lock().is_empty());
+    assert!(!ui.restore_category(7));
 }
 
 fn track(id: i64, title: &str, album: &str, favorite: bool, length: i64) -> TrackListRow {

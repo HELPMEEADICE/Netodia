@@ -45,7 +45,9 @@ fn netease_lyrics_keep_original_translation_and_romanization_together() {
     };
     let outcome = parse_response(&response);
     assert!(matches!(&outcome, LyricsOutcome::Sheet(_)), "expected lyrics");
-    let LyricsOutcome::Sheet(sheet) = outcome else { return };
+    let LyricsOutcome::Sheet(mut sheet) = outcome else { return };
+
+    crate::library::lyrics::romanize::apply(&mut sheet.lines);
 
     assert!(sheet.is_synced());
     assert_eq!(sheet.lines[0].text, "こんにちは");

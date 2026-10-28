@@ -140,7 +140,10 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
-            s.runtime.spawn(reenter(s.clone(), pu.clone(), weak.clone()));
+            let fresh = weak.upgrade().is_some_and(|ui| {
+                super::super::grid::restore_cached_grid(&ui, &pu, s.cloud.status().generation)
+            });
+            s.runtime.spawn(reenter(s.clone(), pu.clone(), weak.clone(), fresh));
         } else {
             let pu = pu.clone();
             s.runtime.spawn_blocking(move || pu.release_section_state());
@@ -148,15 +151,18 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// The section came back on screen: a full re-fetch if dirty, else just
-/// prewarm the visible covers.
-async fn reenter(s: AppState, pu: Arc<PlaylistsUi>, weak: slint::Weak<AppWindow>) {
-    if !pu.take_dirty() {
+/// Restore fresh snapshots without a request; refresh missing or expired snapshots.
+async fn reenter(s: AppState, pu: Arc<PlaylistsUi>, weak: slint::Weak<AppWindow>, fresh: bool) {
+    let dirty = pu.take_dirty();
+    if !dirty && fresh {
         grid_prewarm::prewarm_off_thread(&pu, PlaylistsUi::prewarm_visible_covers).await;
         return;
     }
     let open_id = pu.detail_playlist_id();
-    if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
+    if fresh {
+        grid_prewarm::prewarm_off_thread(&pu, PlaylistsUi::prewarm_visible_covers).await;
+    }
+    if !fresh && let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
         log::warn!("playlists::section_enter fetch_grid: {}", describe(&e));
     }
     if open_id >= 0
@@ -189,6 +195,7 @@ fn install_library_refresher(ui: &AppWindow, state: &AppState, playlists_ui: &Ar
     let pu = playlists_ui.clone();
     let installed =
         on_signal(&state.library_changed, ui.as_weak(), "playlists-library-changed", move |ui| {
+            pu.grid.categories.lock().clear();
             // Skip the in-place refresh when the section is hidden, but
             // mark the cached data dirty so the next section-enter
             // re-fetches from scratch. Without the `mark_dirty`, a

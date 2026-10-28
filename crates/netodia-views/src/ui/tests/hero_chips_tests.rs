@@ -683,16 +683,11 @@ fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
     }
 }
 
-/// The teardown half of the same contract: a fold may not outlive the cache it
-/// was folded from.
-///
-/// `release_section_state` empties the three caches and zeroes `stats`, and the folds
-/// have to go with them. Leaving them isn't the harmless failure it looks like: the band
-/// doesn't come back empty, it comes back **wrong**. `kick_full_refresh` joins three
-/// fetches and `refresh_hero` is the shortest, so the first publish after a re-enter
-/// pairs a fresh count with a pre-leave spread until the rest land.
+/// A fold follows its cache's lifetime: Most Played is released, while Songs retains its
+/// rows, stats and spread for the immediate banner restore. Favorites' behavioral tests also
+/// verify those retained values survive an actual call to `release_section_state`.
 #[test]
-fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
+fn the_section_leave_keeps_each_fold_with_the_cache_it_summarises() {
     const MOD: &str = include_str!("../favorites/mod.rs");
 
     let body = MOD
@@ -707,15 +702,13 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
          `allocator::trim()` — move this pin with it, or the checks below hold over an \
          empty window"
     );
-    for (field, reset) in [
-        ("songs_fold", "HeroFold::default()"),
-        ("most_played_totals", "MostPlayedTotals::default()"),
-    ] {
+    assert!(body.contains("most_played.lock().clear()"));
+    assert!(body.contains("most_played_totals.lock() = MostPlayedTotals::default()"));
+    assert!(!body.contains("tracks_all.clear()"));
+    for field in ["songs_fold", "stats"] {
         assert!(
-            body.contains(&format!("{field}.lock() = {reset}")),
-            "`release_section_state` clears the caches `{field}` was folded from but leaves \
-             `{field}` itself — the next publish then states a spread the count beside it no \
-             longer matches"
+            !body.contains(&format!("{field}.lock() =")),
+            "`release_section_state` retains the Songs cache, so `{field}` must survive with it"
         );
     }
 }

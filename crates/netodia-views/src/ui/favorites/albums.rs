@@ -208,6 +208,7 @@ pub(super) fn paint_on_enter(weak: &Weak<AppWindow>, fav_ui: &FavoritesUi) {
         && let Some(ui) = weak.upgrade()
     {
         apply_now(&ui, fav_ui);
+        super::hero::restore_now(&ui, fav_ui);
         ui.global::<Favorites>().set_albums_loading(true);
     }
 }
@@ -311,17 +312,10 @@ fn spawn_artwork(
                 || fav_ui.state().albums.revision.load(Ordering::Relaxed) != request
                 || !fav_ui.section_active()
                 || fav_ui.active_tab() != FavoritesTab::Albums
-                || !fav_ui.state().last_mosaic_paths.claim(paths)
             {
                 return;
             }
-            crate::ui::detail_view::apply_detail_artwork(
-                &ui,
-                &ui.global::<Favorites>(),
-                pair,
-                true,
-                true,
-            );
+            super::hero::publish_artwork_now(&ui, &fav_ui, paths, pair, true);
         });
     });
 }
