@@ -11,9 +11,7 @@ use netodia_ui::{AppWindow, RecentlyPlayed};
 
 /// Wire the `request-most-played-cover` callback.
 ///
-/// The second argument is `RecentlyPlayed.covers-generation`, read for its effect on the card's
-/// `pure` binding and never for its value: it is what re-runs the lookup once a scheduled decode
-/// lands behind an already-mounted grid.
+/// The private remote-cache token re-runs a mounted card's cover binding after a download.
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let covers = Arc::new(crate::ui::remote_covers::RemoteCoverThumbs::new_for_cards(
@@ -22,7 +20,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
         move || {
             let _ = weak.upgrade_in_event_loop(|ui| {
                 let g = ui.global::<RecentlyPlayed>();
-                g.set_covers_generation(g.get_covers_generation().wrapping_add(1));
+                g.set_most_played_covers_generation(
+                    g.get_most_played_covers_generation().wrapping_add(1),
+                );
             });
         },
     ));

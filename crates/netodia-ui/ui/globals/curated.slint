@@ -173,7 +173,7 @@ export global RecentlyPlayed {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Library-wide tracks by play count, chunked into grid rows. **Rust fills this only
+    // Account-wide listening ranking, chunked into grid rows. **Rust fills this only
     // while Most Played is the mounted tab**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
     // Pre-chunk card count gating the `GridEmptyState` — `rows.length` is a row count, not a card
@@ -200,9 +200,9 @@ export global RecentlyPlayed {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // The grid cards; Songs rows go through `RowCovers`. The lookup takes `covers-generation`
-    // for the reason `Favorites`' pair do: the repaint, not the value.
-    in-out property <int> covers-generation: 0;
+    // Remote cards use their own cache's repaint token; local grid decodes cannot satisfy them.
+    // Songs rows go through `RowCovers` instead.
+    in-out property <int> most-played-covers-generation: 0;
     pure callback request-most-played-cover(string, int) -> image;
 
     // Hero actions. The pill is per-tab: Songs shuffles the filtered recency list, Most

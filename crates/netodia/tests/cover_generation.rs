@@ -35,7 +35,7 @@ const MIN_LOOKUPS: usize = 6;
 /// **An equality, not a floor**, and the count is half of it: the boot file installs two, the row
 /// tier's and the grid tier's, so a set of *files* would find it either way and the one that
 /// matters most could go missing in silence. `set_decoded_notifier` is a `OnceLock`, so that
-/// single grid install is what bumps all six grid generations.
+/// single grid install is what bumps every local grid generation.
 /// A tier whose notifier goes missing still compiles, still schedules and still decodes — it
 /// simply never tells anyone, so its cards sit on the placeholder until something unrelated
 /// dirties the binding.
@@ -199,7 +199,7 @@ fn only_the_boot_install_answers_for_the_grid_tier() {
         .filter(|name| !PRIVATE_TIER_GLOBALS.contains(name))
         .collect();
     assert!(
-        expected.len() >= 6,
+        expected.len() >= 5,
         "only {} grid generations found — the walk is broken",
         expected.len()
     );
@@ -275,4 +275,36 @@ fn remote_album_covers_use_their_own_repaint_token() {
         }
     }
     assert!(consumers >= 2, "both the album cards and online detail must use the private cache");
+}
+
+/// Local grid decodes cannot repaint cards backed by the private remote cache.
+#[test]
+fn remote_recent_song_covers_use_their_own_repaint_token() {
+    let slint = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);
+    let declaring: BTreeSet<String> = slint
+        .iter()
+        .flat_map(|(_, src)| globals_declaring(src, "property <int> most-played-covers-generation"))
+        .collect();
+    assert_eq!(declaring, BTreeSet::from(["RecentlyPlayed".to_owned()]));
+
+    let sources = rust_sources();
+    let writers: BTreeSet<&str> = sources
+        .iter()
+        .filter(|(_, src)| src.contains("set_most_played_covers_generation("))
+        .map(|(path, _)| path.as_str())
+        .collect();
+    assert_eq!(writers, BTreeSet::from(["ui/recently_played/callbacks/covers.rs"]));
+    let wiring = sources
+        .iter()
+        .find(|(path, _)| path == "ui/recently_played/callbacks/covers.rs")
+        .map_or("", |(_, src)| src.as_str());
+    assert!(!wiring.contains("set_covers_generation("));
+
+    let tab = slint
+        .iter()
+        .find(|(path, _)| path.ends_with("views/recently-played/most-played-tab.slint"))
+        .map_or("", |(_, src)| src.as_str());
+    assert!(tab.contains("covers-generation: RecentlyPlayed.most-played-covers-generation;"));
+    assert!(!tab.contains("RecentlyPlayed.covers-generation"));
+    assert!(tab.contains("RecentlyPlayed.request-most-played-cover(p, gen)"));
 }

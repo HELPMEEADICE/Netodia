@@ -296,17 +296,13 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
     );
 }
 
-/// The grid's card binding reads `covers-generation`, and the mount forwards it.
-///
-/// Reading it is the only thing that re-runs a `pure` callback whose result is
-/// otherwise cached until a dependency dirties, and its *value* is the is-it-warm
-/// flag Rust branches on. Drop either half and every card mounted on a cold tab
-/// drags a grid-tier decode onto the UI thread in the frame that paints the grid.
+/// The remote-cache token must reach both the grid binding and its lookup callback.
 #[test]
 fn the_grid_mount_forwards_the_covers_generation() {
     assert!(
-        MOST_PLAYED_TAB.contains("covers-generation: RecentlyPlayed.covers-generation;"),
-        "most-played-tab.slint must forward `covers-generation` to its `EntityCardGrid`"
+        MOST_PLAYED_TAB
+            .contains("covers-generation: RecentlyPlayed.most-played-covers-generation;"),
+        "most-played-tab.slint must forward the remote cache's token to its `EntityCardGrid`"
     );
     // Arity-counted: the one-argument form is a live signature elsewhere in the tree, so a
     // mount wired to it builds and only misbehaves on a cold tab.

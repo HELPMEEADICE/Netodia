@@ -143,7 +143,7 @@ fn request_metadata_fallback(
 /// **One notifier, because there is one grid tier** — `set_decoded_notifier` is a `OnceLock`, and
 /// the seven tiers that used to sit in six view files (Favorites held two) share it now. Bumping a
 /// generation whose page isn't mounted is a property write with no bindings to dirty, so answering
-/// for all six globals costs nothing and saves the tier having to know which grid asked. Slint
+/// for every local grid costs nothing and saves the tier having to know which grid asked. Slint
 /// globals share no trait to be generic over, hence the list.
 fn install_grid_covers(app: &AppWindow) {
     ui::cover_generation::notify_on_decode(ui::grid_prewarm::tier(), app, |app| {
@@ -159,7 +159,6 @@ fn install_grid_covers(app: &AppWindow) {
             netodia_ui::Browse,
             netodia_ui::Favorites,
             netodia_ui::Playlists,
-            netodia_ui::RecentlyPlayed,
         );
     });
 }

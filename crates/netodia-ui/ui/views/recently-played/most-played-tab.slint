@@ -30,7 +30,7 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         // Cloud cards retain exact song ids across Slint's 32-bit integer boundary.
         card-kind: "track";
         selection-scope: "rp-most-played";
-        covers-generation: RecentlyPlayed.covers-generation;
+        covers-generation: RecentlyPlayed.most-played-covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
         cloud-row-clicked(id) => { RecentlyPlayed.play-track(id); }
     }
