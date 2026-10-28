@@ -55,6 +55,7 @@ struct State {
     callback: Callback,
     created_message: u32,
     snapshot: Snapshot,
+    applied_snapshot: Option<Snapshot>,
     added: bool,
 }
 
@@ -92,9 +93,8 @@ pub fn update(hwnd: *mut c_void, snapshot: Snapshot, callback: Callback) {
     };
     let changed = {
         let mut s = state.borrow_mut();
-        let changed = s.snapshot != snapshot;
         s.snapshot = snapshot;
-        changed || !s.added
+        s.applied_snapshot != Some(snapshot) || !s.added
     };
     if changed {
         refresh(hwnd, &state);
@@ -126,6 +126,7 @@ fn create_state(callback: Callback) -> Option<Shared> {
         callback,
         created_message,
         snapshot: Snapshot::default(),
+        applied_snapshot: None,
         added: false,
     })))
 }
@@ -187,7 +188,7 @@ fn button(id: u32, icon: HICON, label: &str, enabled: bool) -> THUMBBUTTON {
 #[allow(unsafe_code, reason = "update the Windows taskbar COM interface")]
 fn refresh(hwnd: HWND, state: &Shared) {
     // Release the borrow before calling the shell, which may dispatch window messages.
-    let (taskbar, buttons, added) = {
+    let (taskbar, buttons, snapshot, added) = {
         let s = state.borrow();
         let p = s.snapshot;
         (
@@ -202,6 +203,7 @@ fn refresh(hwnd: HWND, state: &Shared) {
                 ),
                 button(NEXT, s.icons[2].0, "Next", p.has_next),
             ],
+            p,
             s.added,
         )
     };
@@ -215,10 +217,14 @@ fn refresh(hwnd: HWND, state: &Shared) {
                 .or_else(|_| taskbar.ThumbBarUpdateButtons(hwnd, &buttons))
         }
     };
+    let mut s = state.borrow_mut();
     if result.is_ok() {
-        state.borrow_mut().added = true;
-    } else if added {
-        state.borrow_mut().added = false;
+        s.added = true;
+        // The shell may dispatch a newer update while this call is in flight.
+        s.applied_snapshot = Some(snapshot);
+    } else {
+        // An update failure doesn't remove the toolbar; retry updating the existing buttons.
+        s.applied_snapshot = None;
     }
 }
 
@@ -241,7 +247,11 @@ unsafe extern "system" fn window_proc(
             drop(Box::from_raw(data as *mut Shared));
         }
     } else if msg != 0 && msg == created_message {
-        state.borrow_mut().added = false;
+        {
+            let mut s = state.borrow_mut();
+            s.added = false;
+            s.applied_snapshot = None;
+        }
         refresh(hwnd, &state);
     } else if msg == WM_COMMAND && ((wparam.0 >> 16) & 0xffff) == THBN_CLICKED as usize {
         let action = match wparam.0 & 0xffff {
