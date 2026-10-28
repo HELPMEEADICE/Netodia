@@ -73,7 +73,8 @@ repository secrets. The release-signing preflight signs a small payload and veri
 assets/updater-pubkey.b64 before any matrix build starts, catching missing secrets, wrong passwords
 and mismatched key pairs. Manual
 dispatches run the build matrix independently of CI, then expose unsigned package files as Actions
-artifacts for 30 days; they do not update a Release or the updater manifest.
+artifacts for 30 days; each package is uploaded as a separate unarchived Actions artifact.
+Release signatures are separate artifacts too. Manual runs do not update a Release or the updater manifest.
 
 Every external action is SHA-pinned with a trailing version comment. Use .github/actions/setup-rust
 for every job that compiles Rust; it installs the version and components from rust-toolchain.toml.

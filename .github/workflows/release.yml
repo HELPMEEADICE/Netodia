@@ -218,17 +218,111 @@ jobs:
           files: netodia-*.tar.gz netodia-*.AppImage netodia-*.rpm netodia-*.deb netodia-*.msi netodia-*.zip
           trusted-comment: version=${{ steps.metadata.outputs.version }} target=${{ matrix.target }} file={file}
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Upload Linux tarball
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            netodia-*.tar.gz
-            netodia-*.AppImage
-            netodia-*.rpm
-            netodia-*.deb
-            netodia-*.msi
-            netodia-*.zip
-            netodia-*.minisig
+          path: netodia-*.tar.gz
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload Linux tarball signature
+        if: matrix.os == 'linux' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.tar.gz.minisig
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload AppImage
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.AppImage
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload AppImage signature
+        if: matrix.os == 'linux' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.AppImage.minisig
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload RPM
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.rpm
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload RPM signature
+        if: matrix.os == 'linux' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.rpm.minisig
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload deb
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.deb
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload deb signature
+        if: matrix.os == 'linux' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.deb.minisig
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload MSI
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.msi
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload MSI signature
+        if: matrix.os == 'windows' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.msi.minisig
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload portable ZIP
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.zip
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload portable ZIP signature
+        if: matrix.os == 'windows' && github.event_name == 'release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: netodia-*.zip.minisig
+          archive: false
           retention-days: 30
           if-no-files-found: error
 
@@ -248,6 +342,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+          skip-decompress: true
 
       - uses: ./.github/actions/install-minisign
 
