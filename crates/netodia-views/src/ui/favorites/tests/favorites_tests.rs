@@ -41,6 +41,48 @@ fn favorites_with_songs() -> FavoritesUi {
 }
 
 #[test]
+fn leaving_retains_the_banner_stats_and_composed_artwork_with_the_songs() {
+    let ui = favorites_with_songs();
+    *ui.state().stats.lock() = netodia_core::entities::track::FavoriteStats {
+        count: 2,
+        total_duration_ms: 600_000,
+        artwork_paths: vec!["cover.jpg".to_owned()],
+    };
+    let fold = crate::ui::hero_folds::HeroFold { artists: 2, albums: 2 };
+    *ui.state().songs_fold.lock() = fold;
+    ui.state().hero_cache.lock().insert(
+        FavoritesTab::Songs,
+        (vec!["cover.jpg".to_owned()], crate::ui::detail_artwork::DetailPair::default()),
+    );
+    ui.set_section_active(false);
+
+    ui.release_section_state();
+
+    let stats = ui.state().stats.lock();
+    assert_eq!((stats.count, stats.total_duration_ms), (2, 600_000));
+    assert_eq!(*ui.state().songs_fold.lock(), fold);
+    assert!(ui.state().hero_cache.lock().contains_key(&FavoritesTab::Songs));
+    assert_eq!(ui.filtered_track_ids(), [1, 2]);
+}
+
+#[test]
+fn banner_duration_includes_songs_after_the_fourth_distinct_cover() {
+    let rows = (1..=6)
+        .map(|id| {
+            let mut row = favorite_row(id);
+            row.duration_ms = 60_000;
+            row.artwork_path = Some(format!("cover-{id}.jpg"));
+            row
+        })
+        .collect::<Vec<_>>();
+
+    let stats = super::hero::stats_from_tracks(&rows);
+
+    assert_eq!((stats.count, stats.total_duration_ms), (6, 360_000));
+    assert_eq!(stats.artwork_paths, ["cover-1.jpg", "cover-2.jpg", "cover-3.jpg", "cover-4.jpg"]);
+}
+
+#[test]
 fn unlike_keeps_the_row_and_restoring_it_survives_the_visit() {
     let ui = favorites_with_songs();
     assert!(!ui.reconcile_likes(&std::collections::HashSet::from([2])));

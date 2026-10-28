@@ -49,6 +49,62 @@ fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
     indices.iter().map(|&i| data.playlists[i].name.clone()).collect()
 }
 
+fn cached_categories() -> PlaylistsUi {
+    let ui = PlaylistsUi::new(Arc::new(CoverThumbs::new()), None);
+    ui.grid.categories.lock().insert(
+        0,
+        state::CachedGrid {
+            account_generation: 7,
+            fetched_at: std::time::Instant::now(),
+            data: Arc::new(GridData::new(vec![playlist(1, "Collected", 2, "")])),
+        },
+    );
+    ui.grid.categories.lock().insert(
+        1,
+        state::CachedGrid {
+            account_generation: 7,
+            fetched_at: std::time::Instant::now(),
+            data: Arc::new(GridData::new(vec![playlist(2, "Created", 3, "")])),
+        },
+    );
+    ui
+}
+
+#[test]
+fn switching_categories_restores_each_snapshot_without_releasing_it_on_leave() {
+    let ui = cached_categories();
+    ui.category.store(1, Ordering::Release);
+    assert!(ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(2).map(|row| row.name), Some("Created".to_owned()));
+
+    ui.release_section_state();
+    ui.category.store(0, Ordering::Release);
+    assert!(ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(1).map(|row| row.name), Some("Collected".to_owned()));
+}
+
+#[test]
+fn expired_categories_still_paint_their_snapshot_but_require_refresh() {
+    let ui = cached_categories();
+    if let Some(cached) = ui.grid.categories.lock().get_mut(&0) {
+        cached.fetched_at = std::time::Instant::now() - grid::CATEGORY_CACHE_TTL;
+    }
+
+    assert!(!ui.restore_category(7));
+    assert_eq!(ui.grid_stats_by_id(1).map(|row| row.track_count), Some(2));
+}
+
+#[test]
+fn another_account_cannot_restore_the_previous_accounts_categories() {
+    let ui = cached_categories();
+    assert!(!ui.restore_category(8));
+    assert!(ui.grid.data.lock().playlists.is_empty());
+
+    ui.clear_account_data();
+    assert!(ui.grid.categories.lock().is_empty());
+    assert!(!ui.restore_category(7));
+}
+
 fn track(id: i64, title: &str, album: &str, favorite: bool, length: i64) -> TrackListRow {
     TrackListRow {
         id,

@@ -97,6 +97,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                     favorites_ui_mod::apply_filtered_tracks_now(&ui, &fu);
                     let count = fu.state().tracks_all.snapshot().total();
                     g.set_track_count(count);
+                    favorites_ui_mod::hero::restore_now(&ui, &fu);
                     g.set_cloud_loading(true);
                     g.set_cloud_error(slint::SharedString::default());
                 }
@@ -227,6 +228,7 @@ fn clear_account_data(fav_ui: &FavoritesUi, weak: &slint::Weak<AppWindow>) {
     {
         let _gate = fav_ui.gate();
         fav_ui.state().tracks_all.clear();
+        fav_ui.state().hero_cache.lock().clear();
         fav_ui.state().retained_tracks.lock().clear();
         *fav_ui.state().songs_fold.lock() = crate::ui::hero_folds::HeroFold::default();
         *fav_ui.state().stats.lock() = netodia_core::entities::track::FavoriteStats {

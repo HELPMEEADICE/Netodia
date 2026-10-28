@@ -5,11 +5,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 
 use futures_util::{StreamExt, stream};
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
-use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
+use super::state::{CachedGrid, GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{PlaylistsUi, to_slint_playlist_row};
 use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
@@ -22,6 +23,24 @@ use netodia_core::error::{AppResult, describe};
 use netodia_ui::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
+
+// Bound recommendation staleness while ordinary tab switches stay entirely in memory.
+pub(super) const CATEGORY_CACHE_TTL: Duration = Duration::from_secs(300);
+
+/// Paint the category's last successful snapshot before starting any background refresh.
+/// Returns whether it is fresh enough to skip the request. UI thread only.
+pub(super) fn restore_cached_grid(
+    ui: &AppWindow,
+    playlists_ui: &PlaylistsUi,
+    account_generation: u64,
+) -> bool {
+    let fresh = playlists_ui.restore_category(account_generation);
+    rebuild_grid(ui, playlists_ui);
+    update_flat_rows(ui, playlists_ui);
+    let count = ui.global::<Playlists>().get_total_count();
+    set_cloud_state(ui, false, None, count);
+    fresh
+}
 
 /// Fetch the playlist list from the DB, prewarm cover thumbnails, then
 /// rebuild the grid model on the UI thread. The flat `Playlists.rows`
@@ -52,22 +71,21 @@ async fn fetch_grid_inner(
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
     let account_generation = state.cloud.status().generation;
-    let request = playlists_ui.grid_request.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
-    let category = playlists_ui.category();
-    let empty = Arc::new(GridData::new(Vec::new()));
-    {
+    let (request, category_index) = {
         let _gate = playlists_ui.section.gate();
-        *playlists_ui.grid.data.lock() = empty;
-        *playlists_ui.grid.index_cache.lock() = None;
-    }
+        (
+            playlists_ui.grid_request.fetch_add(1, Ordering::AcqRel).wrapping_add(1),
+            playlists_ui.category.load(Ordering::Acquire),
+        )
+    };
+    let category = MusicLibraryCategory::from_index(category_index);
     let playlists_ui_for_clear = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         if !playlists_ui_for_clear.grid_request_current(request) {
             return;
         }
-        rebuild_grid(&ui, &playlists_ui_for_clear);
-        update_flat_rows(&ui, &playlists_ui_for_clear);
-        set_cloud_state(&ui, true, None, -1);
+        let count = ui.global::<Playlists>().get_total_count();
+        set_cloud_state(&ui, true, None, count);
     });
 
     let playlists = match fetch_saved_playlists(state, category).await {
@@ -90,7 +108,8 @@ async fn fetch_grid_inner(
                 }
                 rebuild_grid(&ui, &playlists_ui);
                 update_flat_rows(&ui, &playlists_ui);
-                set_cloud_state(&ui, false, Some(message), 0);
+                let count = ui.global::<Playlists>().get_total_count();
+                set_cloud_state(&ui, false, Some(message), count);
             });
             return Err(error);
         }
@@ -105,9 +124,15 @@ async fn fetch_grid_inner(
     let data = Arc::new(GridData::new(playlists));
     {
         let _gate = playlists_ui.section.gate();
-        if !playlists_ui.grid_request_current(request) {
+        if !playlists_ui.grid_request_current(request)
+            || state.cloud.status().generation != account_generation
+        {
             return Ok(());
         }
+        playlists_ui.grid.categories.lock().insert(
+            category_index,
+            CachedGrid { account_generation, fetched_at: Instant::now(), data: data.clone() },
+        );
         *playlists_ui.grid.data.lock() = data;
         *playlists_ui.grid.index_cache.lock() = None;
     }

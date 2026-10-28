@@ -1,7 +1,7 @@
 //! Internal data structures for the Favorites view. Mirrors `src/ui/albums/state.rs` in shape,
 //! concentrated here so the public [`crate::ui::favorites::FavoritesUi`] surface stays small.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use parking_lot::Mutex;
 
@@ -38,6 +38,9 @@ pub(crate) struct FavoritesUiState {
     /// properties written around it — the page is assembled from three fetches, so no call site
     /// holds all of it.
     pub stats: Mutex<FavoriteStats>,
+    /// One composed cover/blur pair per visible tab, bounded to the Songs and Albums heroes.
+    pub hero_cache:
+        Mutex<HashMap<super::FavoritesTab, (Vec<String>, crate::ui::detail_artwork::DetailPair)>>,
     /// Grid-tab rows in Rust shape, so click handlers resolve `(id) -> entity` without re-fetching
     /// and a keystroke or column-count change re-chunks in memory. Refreshed in lockstep on
     /// `refresh_grids`.
@@ -48,8 +51,8 @@ pub(crate) struct FavoritesUiState {
     /// words instead of walking every favourite on the UI thread.
     ///
     /// Both describe the whole set, not the filtered view: the band names the page, and the counts
-    /// that do follow the filter are the ones gating the grids' empty states. Both are reset by
-    /// `FavoritesUi::release_section_state` beside the caches they were folded from.
+    /// that do follow the filter are the ones gating the grids' empty states. Songs retains its
+    /// fold with the cached rows; Most Played releases its totals beside its transient grid.
     pub songs_fold: Mutex<HeroFold>,
     pub most_played_totals: Mutex<MostPlayedTotals>,
     /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same diff-then-write
@@ -82,6 +85,7 @@ impl FavoritesUiState {
                 total_duration_ms: 0,
                 artwork_paths: Vec::new(),
             }),
+            hero_cache: Mutex::new(HashMap::new()),
             most_played: Mutex::new(Vec::new()),
             fav_artists: Mutex::new(Vec::new()),
             songs_fold: Mutex::new(HeroFold::default()),

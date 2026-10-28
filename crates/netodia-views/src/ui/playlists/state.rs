@@ -1,7 +1,9 @@
 //! Internal data structures + constants used by the Playlists grid and
 //! Playlist Detail submodules.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use parking_lot::Mutex;
 
@@ -105,6 +107,13 @@ impl GridIndexCache {
 pub(super) struct PlaylistGridState {
     pub data: Mutex<Arc<GridData>>,
     pub index_cache: Mutex<Option<GridIndexCache>>,
+    pub categories: Mutex<HashMap<i32, CachedGrid>>,
+}
+
+pub(super) struct CachedGrid {
+    pub account_generation: u64,
+    pub fetched_at: Instant,
+    pub data: Arc<GridData>,
 }
 
 /// Detail-side state: the shared track cache plus the curated order only this detail has.
