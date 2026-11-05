@@ -34,7 +34,7 @@ pub enum Error {
 
 impl From<Error> for netodia_core::error::AppError {
     fn from(error: Error) -> Self {
-        Self::network_msg(error.to_string())
+        Self::network(error.to_string(), error)
     }
 }
 

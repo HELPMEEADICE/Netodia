@@ -227,6 +227,12 @@ impl CloudService {
         self.public_request(self.client.stream(song_id, quality)).await
     }
 
+    /// Verify an apparently signed-in session when a stream cannot be resolved. A missing stream
+    /// URL alone does not say whether the song or the saved session is unavailable.
+    pub(crate) async fn verify_session(&self) -> AppResult<()> {
+        self.private_request(self.client.account()).await.map(|_| ())
+    }
+
     pub async fn discover(&self) -> AppResult<Vec<Playlist>> {
         self.public_request(self.client.discover()).await
     }

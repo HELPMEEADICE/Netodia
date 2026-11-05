@@ -243,7 +243,9 @@ fn wire_transport(player: &Player<'_>, state: &AppState) {
     player.on_play_pause(move || {
         let s = s.clone();
         s.runtime.clone().spawn(async move {
-            let result = if s.cloud_playback.restored_cloud_track_waiting() {
+            let result = if s.cloud_playback.cancel_queue_track_loading() {
+                Ok(())
+            } else if s.cloud_playback.restored_cloud_track_waiting() {
                 s.cloud_playback.resume_restored_queue().await
             } else {
                 library::playback::player_toggle_play_pause(&s.playback_ctx())

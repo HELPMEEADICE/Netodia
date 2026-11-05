@@ -19,6 +19,11 @@ impl EventSink for SlintEventSink {
         self.state.runtime.spawn(async move {
             let ctx = s.playback_ctx();
             let r = match ev {
+                PlayerEvent::Pause | PlayerEvent::PlayPause | PlayerEvent::Stop
+                    if s.cloud_playback.cancel_queue_track_loading() =>
+                {
+                    Ok(())
+                }
                 PlayerEvent::Play | PlayerEvent::PlayPause
                     if s.cloud_playback.restored_cloud_track_waiting() =>
                 {

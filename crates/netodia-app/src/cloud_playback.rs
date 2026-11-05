@@ -13,6 +13,7 @@ use netodia_audio::player::source::file_decode::FileDecoder;
 use netodia_core::entities::cloud::{Account, Quality, Song, StreamTicket};
 use netodia_core::entities::track::TrackSummary;
 use netodia_core::error::{AppError, AppResult};
+use netodia_core::utils::toast::{self, ToastKind};
 use netodia_engine::player::engine::backend::PlaybackEngine;
 use netodia_engine::player::engine::event_sink::{ExternalTrackPlayback, PlayerSinks};
 use netodia_engine::player::engine::queue::QueueState;
@@ -367,6 +368,20 @@ impl CloudPlayback {
         generation != 0 && self.engine.is_playback_request_current(generation)
     }
 
+    /// A second play/pause click while a cloud track loads cancels the pending request.
+    pub fn cancel_queue_track_loading(&self) -> bool {
+        let _exec = self.player_state.lock_exec();
+        if !self.is_queue_track_loading() {
+            return false;
+        }
+        self.engine.stop();
+        with_state_emit(&self.player_state, &self.sinks, |state| {
+            state.status = PlaybackStatus::Stopped;
+            state.position_ms = 0;
+        });
+        true
+    }
+
     /// A delayed roaming refill must not append to a playlist selected in the meantime.
     pub async fn enqueue_roaming(&self, song_ids: &[i64], generation: u64) -> AppResult<()> {
         self.enqueue_in_generation(song_ids, false, Some(generation)).await
@@ -499,6 +514,9 @@ impl CloudPlayback {
         let quality = self.quality();
         let mut last_error = None;
         for candidate in candidates {
+            if !self.engine.is_playback_request_current(generation) {
+                return Ok(CloudPlaybackResult { started: false, trial: false });
+            }
             let song_id = tracks[candidate].id;
             match self
                 .play_reserved(ReservedPlayback {
@@ -519,7 +537,18 @@ impl CloudPlayback {
             {
                 Ok(result) if result.started => return Ok(result),
                 Ok(result) => return Ok(result), // A newer selection superseded this request.
-                Err(error) => last_error = Some(error),
+                Err(error) => {
+                    if !self.engine.is_playback_request_current(generation) {
+                        return Ok(CloudPlaybackResult { started: false, trial: false });
+                    }
+                    if !self.should_skip_playback_error(&error, generation).await {
+                        if !self.engine.is_playback_request_current(generation) {
+                            return Ok(CloudPlaybackResult { started: false, trial: false });
+                        }
+                        return Err(error);
+                    }
+                    last_error = Some(error);
+                }
             }
         }
         Err(last_error
@@ -625,8 +654,18 @@ impl CloudPlayback {
     }
 
     pub async fn logout(&self) -> AppResult<()> {
-        self.engine.stop();
+        self.stop_for_logout();
         self.cloud.logout().await
+    }
+
+    fn stop_for_logout(&self) {
+        let _exec = self.player_state.lock_exec();
+        self.engine.stop();
+        *self.active_stream_ticket.write() = None;
+        with_state_emit(&self.player_state, &self.sinks, |state| {
+            state.status = PlaybackStatus::Stopped;
+            state.position_ms = 0;
+        });
     }
 
     /// Resolve a short-lived ticket, open and seek the media source off the async executor, then
@@ -1093,6 +1132,9 @@ impl CloudQueuePlaybackHandler {
                 )
                 .await;
             if let Err(error) = result {
+                if playback.engine.is_playback_request_current(generation) {
+                    playback.should_skip_playback_error(&error, generation).await;
+                }
                 log::warn!(
                     "cloud track resume {song_id}: {}",
                     netodia_core::error::describe(&error)
@@ -1134,7 +1176,16 @@ impl CloudPlayback {
             {
                 Ok(result) if result.started => return Ok(()),
                 Ok(_) => return Ok(()), // A newer selection superseded this request.
-                Err(error) => last_error = Some(error),
+                Err(error) => {
+                    if !self.engine.is_playback_request_current(generation) {
+                        return Ok(());
+                    }
+                    let skip = self.should_skip_playback_error(&error, generation).await;
+                    last_error = Some(error);
+                    if !skip {
+                        break;
+                    }
+                }
             }
             if attempt + 1 == attempts {
                 break;
@@ -1145,6 +1196,7 @@ impl CloudPlayback {
             song_id = next_id;
         }
 
+        let _exec = self.player_state.lock_exec();
         if !self.engine.is_playback_request_current(generation)
             || !self.current_cloud_track_is(song_id)
         {
@@ -1171,6 +1223,7 @@ impl CloudPlayback {
         failed_song_id: i64,
         generation: u64,
     ) -> Option<i64> {
+        let _exec = self.player_state.lock_exec();
         if !self.engine.is_playback_request_current(generation) {
             return None;
         }
@@ -1192,6 +1245,53 @@ impl CloudPlayback {
             }
         });
         next_id
+    }
+
+    /// Only a track-specific failure warrants trying another song. In guest mode a missing URL
+    /// may mean login is required, so keep the current song and offer a sign-in hint instead.
+    async fn should_skip_playback_error(&self, error: &AppError, generation: u64) -> bool {
+        let mut failure = playback_failure(error, self.cloud.status().account.is_some());
+        if failure == PlaybackFailure::Skip {
+            failure = match self.cloud.verify_session().await {
+                Ok(()) => PlaybackFailure::Skip,
+                Err(error) => match playback_failure(&error, true) {
+                    PlaybackFailure::SignIn => PlaybackFailure::SignIn,
+                    _ => PlaybackFailure::Stop,
+                },
+            };
+        }
+        if !self.engine.is_playback_request_current(generation) {
+            return false;
+        }
+        match failure {
+            PlaybackFailure::SignIn => {
+                toast::notify(ToastKind::PlaybackFailed, "歌曲无法播放，请登录网易云音乐后重试。");
+                false
+            }
+            PlaybackFailure::Skip => true,
+            PlaybackFailure::Stop => false,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PlaybackFailure {
+    SignIn,
+    Skip,
+    Stop,
+}
+
+fn playback_failure(error: &AppError, signed_in: bool) -> PlaybackFailure {
+    use netodia_net::netease::Error;
+    let cause = match error {
+        AppError::Network { source: Some(source), .. } => source.downcast_ref::<Error>(),
+        _ => None,
+    };
+    match cause {
+        Some(Error::Authentication) => PlaybackFailure::SignIn,
+        Some(Error::Unavailable | Error::Permission) if !signed_in => PlaybackFailure::SignIn,
+        Some(Error::Unavailable | Error::Permission) => PlaybackFailure::Skip,
+        _ => PlaybackFailure::Stop,
     }
 }
 

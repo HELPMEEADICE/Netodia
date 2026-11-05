@@ -1,14 +1,100 @@
 use std::sync::Arc;
 
 use super::{
-    CloudQueuePlan, CloudQueueShuffle, playback_candidates, queue_cloud_tracks,
-    queue_track_metadata, resolve_track_metadata, track_summary,
+    CloudQueuePlan, CloudQueueShuffle, PlaybackFailure, playback_candidates, playback_failure,
+    queue_cloud_tracks, queue_track_metadata, resolve_track_metadata, track_summary,
 };
 use netodia_core::entities::cloud::{Album, Song};
 use netodia_core::entities::track::TrackSummary;
 use netodia_engine::player::engine::queue::QueueState;
 use netodia_engine::player::engine::types::RepeatMode;
 use rand::{SeedableRng, rngs::StdRng};
+
+#[test]
+fn playback_failures_only_skip_song_specific_errors_for_signed_in_users() {
+    use netodia_net::netease::Error;
+
+    assert_eq!(playback_failure(&Error::Authentication.into(), true), PlaybackFailure::SignIn);
+    assert_eq!(playback_failure(&Error::Unavailable.into(), false), PlaybackFailure::SignIn);
+    assert_eq!(playback_failure(&Error::Permission.into(), false), PlaybackFailure::SignIn);
+    assert_eq!(playback_failure(&Error::Unavailable.into(), true), PlaybackFailure::Skip);
+    assert_eq!(playback_failure(&Error::Permission.into(), true), PlaybackFailure::Skip);
+    assert_eq!(playback_failure(&Error::Transport.into(), false), PlaybackFailure::Stop);
+    assert_eq!(playback_failure(&Error::Timeout.into(), true), PlaybackFailure::Stop);
+}
+
+#[tokio::test]
+async fn logout_stops_the_player_and_invalidates_in_flight_playback()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::cloud_playback::CloudPlayback;
+    use crate::state::fixtures::TestPlayback;
+    use netodia_engine::player::engine::state::lock_state;
+    use netodia_engine::player::engine::types::PlaybackStatus;
+
+    let fixture = TestPlayback::empty().await?;
+    let playback = CloudPlayback::new(
+        crate::cloud::tests::service_without_network_for_test(),
+        reqwest::Client::new(),
+        fixture.tmp.path().join("artwork"),
+        fixture.ctx.engine.clone(),
+        fixture.ctx.player_state.clone(),
+        fixture.ctx.sinks.clone(),
+    );
+    {
+        let mut state = lock_state(&fixture.ctx.player_state);
+        state.status = PlaybackStatus::Playing;
+        state.position_ms = 1234;
+        state.source = Some(track(19));
+        state.queue.add_tracks(vec![track(19), track(20)]);
+        state.queue.current_index = Some(0);
+    }
+    let generation = fixture.ctx.engine.reserve_playback_request();
+    playback.stop_for_logout();
+
+    let state = lock_state(&fixture.ctx.player_state);
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.source.as_ref().map(|track| track.id), Some(19));
+    assert_eq!(state.queue.get_current().map(|track| track.id), Some(19));
+    assert!(!fixture.ctx.engine.is_playback_request_current(generation));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cancelling_a_loading_track_preserves_the_queue_and_rejects_late_results()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::cloud_playback::CloudPlayback;
+    use crate::state::fixtures::TestPlayback;
+    use netodia_engine::player::engine::state::lock_state;
+    use netodia_engine::player::engine::types::PlaybackStatus;
+    use std::sync::atomic::Ordering;
+
+    let fixture = TestPlayback::empty().await?;
+    let playback = CloudPlayback::new(
+        crate::cloud::tests::service_without_network_for_test(),
+        reqwest::Client::new(),
+        fixture.tmp.path().join("artwork"),
+        fixture.ctx.engine.clone(),
+        fixture.ctx.player_state.clone(),
+        fixture.ctx.sinks.clone(),
+    );
+    {
+        let mut state = lock_state(&fixture.ctx.player_state);
+        state.source = Some(track(19));
+        state.queue.add_tracks(vec![track(19), track(20)]);
+        state.queue.current_index = Some(0);
+    }
+    let generation = fixture.ctx.engine.reserve_playback_request();
+    playback.pending_queue_playback_generation.store(generation, Ordering::Release);
+    assert!(playback.cancel_queue_track_loading());
+    assert!(!playback.cancel_queue_track_loading());
+    assert!(playback.advance_cloud_queue_after_failure(19, generation).is_none());
+    let state = lock_state(&fixture.ctx.player_state);
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.queue.get_current().map(|track| track.id), Some(19));
+    assert!(!fixture.ctx.engine.is_playback_request_current(generation));
+    Ok(())
+}
 
 fn replace(queue: &mut QueueState, shuffle: CloudQueueShuffle, start_index: usize) {
     CloudQueuePlan {
