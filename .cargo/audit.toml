@@ -48,4 +48,10 @@ ignore = [
     "RUSTSEC-2026-0370",
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
+
+    # pin-utils 0.1.0 is unmaintained, with no replacement release. It is used by spin_on 0.1.1
+    # only to pin Slint's compiler future, through slint-build and slint-macros at build time;
+    # it is not part of the shipped application. Slint 1.17.1 still uses the same spin_on version.
+    # revisit: 2027-02-05
+    "RUSTSEC-2026-0441",
 ]
