@@ -693,51 +693,72 @@ impl CloudPlayback {
         .await
     }
 
-    /// Re-open a cloud stream at a new position. Cloud sources cannot use the local-file seek
-    /// action, so seeking is a new range-backed decoder generation. The current-track check and
-    /// generation reservation happen before the first await, preventing a delayed slider task
-    /// from taking over a song selected after the user dragged it.
-    /// Reuse the active ticket and its HTTP cache: resolving another URL here adds an API round
-    /// trip and discards the media bytes the outgoing decoder has already downloaded.
-    pub async fn seek(&self, song_id: i64, position: Duration) -> AppResult<CloudPlaybackResult> {
-        let (generation, volume, speed, was_paused, position) = {
-            let _exec = self.player_state.lock_exec();
-            let state = lock_state(&self.player_state);
-            let Some(track) = state.source.as_ref() else {
+    /// Silence the old source before resolving a seek, retaining the transport's play/pause
+    /// intent so another seek or a user pause can supersede this request while it loads.
+    pub fn seek(
+        &self,
+        song_id: i64,
+        position: Duration,
+    ) -> impl Future<Output = AppResult<CloudPlaybackResult>> + Send + 'static {
+        let request = self.reserve_seek(song_id, position);
+        let playback = self.clone();
+        async move {
+            let Some(request) = request else {
                 return Ok(CloudPlaybackResult { started: false, trial: false });
             };
-            if track.id != song_id || !track.file_path.is_empty() {
+            let generation = request.generation;
+            if !playback.engine.is_playback_request_current(generation) {
                 return Ok(CloudPlaybackResult { started: false, trial: false });
             }
-            if !matches!(state.status, PlaybackStatus::Playing | PlaybackStatus::Paused) {
-                return Ok(CloudPlaybackResult { started: false, trial: false });
+            let cached_ticket = playback.valid_stream_ticket(song_id, request.quality);
+            let result = playback.play_reserved_with_ticket(request, cached_ticket).await;
+            if result.is_err() {
+                let _exec = playback.player_state.lock_exec();
+                // An older failure must not pause a newer seek or a newly selected track.
+                if !playback.engine.is_playback_request_current(generation) {
+                    return Ok(CloudPlaybackResult { started: false, trial: false });
+                }
+                playback.engine.pause();
+                with_state_emit(&playback.player_state, &playback.sinks, |state| {
+                    state.status = PlaybackStatus::Paused;
+                });
             }
-            let volume = state.effective_volume();
-            let speed = state.playback_speed;
-            let was_paused = state.status == PlaybackStatus::Paused;
-            let requested_ms = u64::try_from(position.as_millis()).unwrap_or(u64::MAX);
-            let position =
-                Duration::from_millis(requested_ms.min(state.duration_ms.saturating_sub(500)));
-            drop(state);
-            let generation = self.engine.reserve_playback_request();
-            (generation, volume, speed, was_paused, position)
-        };
-        let quality = self.quality();
-        let cached_ticket = self.valid_stream_ticket(song_id, quality);
-        self.play_reserved_with_ticket(
-            ReservedPlayback {
-                song_id,
-                quality,
-                volume,
-                speed,
-                start_position: Some(position),
-                generation,
-                keep_paused: was_paused,
-                queue_update: QueueUpdate::Preserve,
-            },
-            cached_ticket,
-        )
-        .await
+            result
+        }
+    }
+
+    fn reserve_seek(&self, song_id: i64, position: Duration) -> Option<ReservedPlayback> {
+        let _exec = self.player_state.lock_exec();
+        let state = lock_state(&self.player_state);
+        let track = state.source.as_ref()?;
+        if track.id != song_id
+            || !track.file_path.is_empty()
+            || !matches!(state.status, PlaybackStatus::Playing | PlaybackStatus::Paused)
+        {
+            return None;
+        }
+        let volume = state.effective_volume();
+        let speed = state.playback_speed;
+        let was_paused = state.status == PlaybackStatus::Paused;
+        let requested_ms = u64::try_from(position.as_millis()).unwrap_or(u64::MAX);
+        let position =
+            Duration::from_millis(requested_ms.min(state.duration_ms.saturating_sub(500)));
+        drop(state);
+
+        // Pause invalidates older requests, so reserve this one afterwards. Keep the logical
+        // status as the user's intent; the monitor skips the suspended deck while it loads.
+        self.engine.pause();
+        let generation = self.engine.reserve_playback_request();
+        Some(ReservedPlayback {
+            song_id,
+            quality: self.quality(),
+            volume,
+            speed,
+            start_position: Some(position),
+            generation,
+            keep_paused: was_paused,
+            queue_update: QueueUpdate::Preserve,
+        })
     }
 
     async fn play_reserved(&self, request: ReservedPlayback) -> AppResult<CloudPlaybackResult> {
@@ -1087,6 +1108,8 @@ impl ExternalTrackPlayback for CloudQueuePlaybackHandler {
 
         let cached_ticket = self.playback.valid_stream_ticket(song_id, quality);
         if cached_ticket.is_some() && self.playback.engine.holds_source() {
+            // A manual resume supersedes a seek that was requested while paused.
+            self.playback.engine.reserve_playback_request();
             self.playback.engine.resume();
             return;
         }
@@ -1458,6 +1481,10 @@ fn decoder_extension(format: &str) -> &'static str {
 }
 
 #[cfg(test)]
+#[path = "tests/cloud_seek_tests.rs"]
+mod seek_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{decoder_extension, open_buffered_source, playback_candidates, track_summary};
     use netodia_audio::player::source::audio::AudioSource;
@@ -1468,7 +1495,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    fn serve_media(
+    pub(super) fn serve_media(
         listener: TcpListener,
         bytes: Vec<u8>,
     ) -> thread::JoinHandle<std::io::Result<()>> {

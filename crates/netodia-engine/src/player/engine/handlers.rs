@@ -386,6 +386,12 @@ impl Monitor {
             return Poll::Skipped;
         }
 
+        // A cloud seek suspends output while retaining the user's playing intent. Do not
+        // publish the old clock or advance a drained source while its replacement loads.
+        if self.engine.is_paused() {
+            return Poll::Skipped;
+        }
+
         // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
         match self.engine.check_playback_state() {
             PlaybackCheck::GaplessTransition => {
@@ -423,13 +429,19 @@ impl Monitor {
         // Advance the queue (or, if the sleep-timer's "End of current
         // track" mode is armed, disarm it and stop instead). See
         // `PlayerState::build_end_of_stream_actions`.
-        emit_and_execute(
-            &*self.engine,
-            &self.player_state,
-            &self.sinks,
-            PlayerState::build_end_of_stream_actions,
-        );
-        Poll::Counted
+        let mut advanced = false;
+        emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
+            // A seek or track switch may have won the execution lock after the EOS snapshot.
+            if state.status != PlaybackStatus::Playing
+                || self.engine.is_paused()
+                || self.engine.holds_source()
+            {
+                return Vec::new();
+            }
+            advanced = true;
+            state.build_end_of_stream_actions()
+        });
+        if advanced { Poll::Counted } else { Poll::Skipped }
     }
 
     /// Normal tick: update position with lightweight event.
