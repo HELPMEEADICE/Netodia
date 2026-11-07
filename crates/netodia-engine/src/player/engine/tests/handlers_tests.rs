@@ -490,3 +490,41 @@ fn a_seek_backwards_publishes_rather_than_waiting_for_the_old_second() {
     assert!(gate.admits(90_000));
     assert!(gate.admits(10_000));
 }
+
+/// The old source may already be drained when a seek suspends output. Its empty deck must not
+/// advance the queue before the replacement source is ready.
+#[tokio::test]
+async fn a_suspended_seek_does_not_advance_the_queue_or_publish_the_old_clock()
+-> Result<(), AppError> {
+    let device = Shape {
+        channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
+        rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),
+    };
+    let (mixer, _pull) = mixer::pair(DECK_COUNT, device);
+    let engine = Arc::new(PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?);
+    let mut state = playing_state();
+    state.position_ms = 1_234;
+    let (handle, sinks, _published) = seated(state);
+    let handle = Arc::new(handle);
+    let (position_tx, positions) = watch::channel(None);
+    let (signal_path_tx, _) = watch::channel(None);
+    engine.pause();
+    let mut monitor = Monitor::new(PlaybackMonitorContext {
+        shutdown_token: CancellationToken::new(),
+        player_state: handle.clone(),
+        engine,
+        sinks: Arc::new(sinks),
+        position_tx,
+        signal_path_tx,
+        save: Arc::new(|_| Box::pin(async {})),
+    });
+
+    assert!(monitor.poll() == Poll::Skipped);
+    assert!(monitor.end_of_stream() == Poll::Skipped, "a pre-seek EOS snapshot must be refused");
+
+    let state = lock_state(&handle);
+    assert_eq!(state.queue.get_current().map(|track| track.id), Some(1));
+    assert_eq!(state.position_ms, 1_234);
+    assert!(positions.borrow().is_none());
+    Ok(())
+}

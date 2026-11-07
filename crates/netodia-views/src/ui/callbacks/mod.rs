@@ -26,6 +26,7 @@ pub(in crate::ui) mod track_list;
 mod updater;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
@@ -286,9 +287,11 @@ fn wire_transport(player: &Player<'_>, state: &AppState) {
 /// Hold the slider at the requested position until the backend reports a
 /// matching update (`Player.seek_pending_ms`).
 fn wire_seek(ui: &AppWindow, state: &AppState) {
+    let latest_seek = Arc::new(AtomicU64::new(0));
     let s = state.clone();
     let weak = ui.as_weak();
     ui.global::<Player>().on_seek(move |position_ms| {
+        let request_id = latest_seek.fetch_add(1, Ordering::Relaxed) + 1;
         if let Some(ui) = weak.upgrade() {
             ui.global::<Player>().set_seek_pending_ms(position_ms.max(0));
         }
@@ -299,10 +302,11 @@ fn wire_seek(ui: &AppWindow, state: &AppState) {
             player.source.as_ref().filter(|track| track.file_path.is_empty()).map(|track| track.id)
         };
         if let Some(song_id) = cloud_track_id {
+            let latest_seek = latest_seek.clone();
             let weak = weak.clone();
+            let seek = s.cloud_playback.seek(song_id, std::time::Duration::from_millis(pos));
             s.runtime.clone().spawn(async move {
-                let result =
-                    s.cloud_playback.seek(song_id, std::time::Duration::from_millis(pos)).await;
+                let result = seek.await;
                 let failed = match result {
                     Ok(result) => !result.started,
                     Err(error) => {
@@ -314,8 +318,9 @@ fn wire_seek(ui: &AppWindow, state: &AppState) {
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(ui) = weak.upgrade() {
                             let player = ui.global::<Player>();
-                            if player.get_seek_pending_ms()
-                                == i32::try_from(pos).unwrap_or(i32::MAX)
+                            if latest_seek.load(Ordering::Relaxed) == request_id
+                                && player.get_seek_pending_ms()
+                                    == i32::try_from(pos).unwrap_or(i32::MAX)
                             {
                                 player.set_seek_pending_ms(-1);
                             }

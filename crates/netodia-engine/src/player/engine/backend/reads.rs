@@ -22,6 +22,11 @@ impl PlaybackEngine {
         millis(self.lock_decks().active().voice.heard(self.output.lead.get()))
     }
 
+    /// Whether output is suspended, including while a cloud seek prepares its replacement.
+    pub fn is_paused(&self) -> bool {
+        self.lock_decks().active().voice.is_paused()
+    }
+
     /// Whether the active decoder has temporarily run out of buffered PCM while fetching more.
     pub fn query_buffering(&self) -> bool {
         self.lock_decks().active().voice.playing().is_some_and(|source| source.buffering)

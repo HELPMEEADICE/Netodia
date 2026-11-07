@@ -1105,7 +1105,7 @@ pub(crate) mod tests {
 
     const DEVICE_ID: &str = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123";
 
-    pub(super) fn service_for_test() -> CloudService {
+    pub(crate) fn service_for_test() -> CloudService {
         let http = reqwest::Client::new();
         let (status, _) =
             watch::channel(SessionStatus { remember_available: true, ..SessionStatus::default() });
