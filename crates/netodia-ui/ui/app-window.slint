@@ -93,7 +93,9 @@ export {
 }
 
 export component AppWindow inherits Window {
-    title: "Netodia";
+    // The OS shows this over the taskbar thumbnail, in Alt+Tab and on the native titlebar, so it
+    // names the song while one is loaded, paused included.
+    title: Player.vm.has_track && Player.vm.track.title != "" ? Player.vm.track.title : "Netodia";
     // No `preferred-width`/`-height` on purpose: `window_chrome/geometry.rs::restore` calls
     // `set_size` after `AppWindow::new()`, setting winit's `has_explicit_size` — the only thing
     // stopping Slint snapping to the content-preferred size on first show, which a preferred size
