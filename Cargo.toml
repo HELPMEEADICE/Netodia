@@ -281,8 +281,9 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 libc = "0.2.189"
 
 # Windows
-# Shell thumbnail toolbar and window subclassing.
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Shell thumbnail toolbar and window subclassing, plus the DWM cover preview and the
+# DPI-sized alpha glyphs on its buttons.
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
 # `Netodia.exe.old` is still loaded, `GetUserDefaultLocaleName`, the DWM accent
 # values `window_border` reads out of the registry, and the exclusive output's

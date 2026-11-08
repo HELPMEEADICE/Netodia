@@ -26,12 +26,13 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Eighteen calls, in sixteen `unsafe`
-blocks, across eight files, under thirteen `#[allow(unsafe_code)]` attributes.** Say which of
-the four you mean when you quote a number, and re-derive it the same way — they differ,
-and none of them is the count of rows below. (The attributes fall three short of the blocks
-because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
-`endpoint_volume.rs`'s `activate` on one holding three.)
+no other kind, and the list is short enough to keep here. **Thirty-nine calls, in thirty-eight
+`unsafe` blocks, across ten files, under twenty-six `#[allow(unsafe_code)]` attributes.** Say
+which of the four you mean when you quote a number, and re-derive it the same way — they differ,
+and none of them is the count of rows below. (The attributes fall short of the blocks because
+`dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them,
+`endpoint_volume.rs`'s `activate` on one holding three, and most of the taskbar's on several. Four
+of the taskbar's blocks make no call at all, reclaiming or reading memory an OS call handed back.)
 
 | site | what |
 |---|---|
@@ -42,6 +43,8 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/netodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `crates/netodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 | `crates/netodia-playback/…/output/mmcss.rs` | `AvSetMmThreadCharacteristicsW` and `AvRevertMmThreadCharacteristics` (the exclusive writer's MMCSS registration, reverted on the same thread) |
+| `crates/netodia-platform/…/taskbar/mod.rs` | the window subclass (`Get`/`Set`/`RemoveWindowSubclass`, `DefSubclassProc`, and reclaiming the context it hands back), `ITaskbarList3`'s thumbnail toolbar, `GetDpiForWindow` and `GetSystemMetricsForDpi` for the glyph size and the preview's, and DWM's iconic thumbnail (`DwmSetWindowAttribute`, `DwmInvalidateIconicBitmaps`, `DwmSetIconicThumbnail`) |
+| `crates/netodia-platform/…/taskbar/bitmap.rs` | `CreateDIBSection` and filling the pixels it allocates, `CreateBitmap`, `CreateIconIndirect`, and the `DeleteObject`/`DestroyIcon` that release them |
 | `crates/netodia-playback/…/output/endpoint_volume.rs` | `CoCreateInstance`, `IMMDeviceEnumerator::GetDevice` and `IMMDevice::Activate` (reaching the endpoint volume `wasapi` doesn't wrap), `Get`/`SetMasterVolumeLevelScalar` (the claimed device's own volume control, on the exclusive writer's thread) |
 
 A new site outside that shape is a different *kind* of thing rather than one more of the
@@ -74,8 +77,10 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
   first: a mistyped signature is UB the compiler will happily agree with, and it is the one
   half of an FFI site no `// SAFETY:` comment can make checkable.
   **A COM interface is the exception, and it comes from `windows`**, which is where the vtables
-  are: `windows-sys` declares none. `endpoint_volume.rs` is the one site, held to the `windows`
-  release `wasapi` and cpal already resolve, so it adds no second copy.
+  are: `windows-sys` declares none. `endpoint_volume.rs` and the taskbar's `ITaskbarList3` are the two
+  sites, held to the `windows` release `wasapi` and cpal already resolve, so they add no second
+  copy. The taskbar takes its GDI and DWM calls from the same crate, where `windows-sys` would put
+  two incompatible `HWND`s in one file.
 - **`cfg`-gate at the call site *and* check the manifest.** `libc` is declared under
   `[target.'cfg(target_os = "linux")']`, so a `cfg(unix)` call site compiles on Linux
   and fails to resolve on macOS. That exact mismatch shipped once in a test.
