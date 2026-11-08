@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use netodia_audio::player::source::audio::AudioSource;
@@ -1436,20 +1436,31 @@ fn open_buffered_source(
     start: Duration,
     reader: Option<RangeReader>,
 ) -> AppResult<(BufferedAudioSource, RangeReader)> {
-    let reader = match reader {
+    let mut reader = match reader {
         Some(reader) => reader,
         None => RangeReader::open(url)
             .map_err(|error| AppError::network("在线播放源加载失败", error))?,
     };
     let reusable = reader.reopen();
     let byte_len = reader.byte_len().or(reported_size);
-    let mut decoder = FileDecoder::open_reader(reader, extension, byte_len)?;
-    if !start.is_zero() {
-        decoder
-            .try_seek(start)
-            .map_err(|error| AppError::Player(format!("在线播放定位失败：{error}")))?;
-    }
-    let source = BufferedAudioSource::open(move || Ok(decoder))?;
+    let extension = extension.to_owned();
+    let ready = Arc::new(AtomicBool::new(false));
+    let retry_ready = Arc::clone(&ready);
+    let source = BufferedAudioSource::open_cancellable(move |cancelled| {
+        // Opening, seeking and the first PCM block must still report failures to the caller.
+        // Only a source the caller can retire may wait indefinitely for a route to recover.
+        reader.retry_interrupted_reads(move || {
+            retry_ready.load(Ordering::Acquire) && !cancelled.load(Ordering::Acquire)
+        });
+        let mut decoder = FileDecoder::open_reader(reader, &extension, byte_len)?;
+        if !start.is_zero() {
+            decoder
+                .try_seek(start)
+                .map_err(|error| AppError::Player(format!("在线播放定位失败：{error}")))?;
+        }
+        Ok(decoder)
+    })?;
+    ready.store(true, Ordering::Release);
     Ok((source, reusable))
 }
 

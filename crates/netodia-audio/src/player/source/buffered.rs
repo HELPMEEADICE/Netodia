@@ -30,8 +30,7 @@ pub enum BufferState {
 }
 
 struct Shared {
-    cancelled: AtomicBool,
-    finished: AtomicBool,
+    cancelled: Arc<AtomicBool>,
     state: AtomicU8,
 }
 
@@ -63,23 +62,31 @@ impl BufferedAudioSource {
         F: FnOnce() -> Result<S, AppError> + Send + 'static,
         S: AudioSource + 'static,
     {
+        Self::open_cancellable(move |_| factory())
+    }
+
+    /// Opens a decoder with a cancellation flag set when its buffered source is retired.
+    /// Blocking readers can use it to stop reconnecting after a stop or track change.
+    pub fn open_cancellable<F, S>(factory: F) -> Result<Self, AppError>
+    where
+        F: FnOnce(Arc<AtomicBool>) -> Result<S, AppError> + Send + 'static,
+        S: AudioSource + 'static,
+    {
         let (sender, receiver) = sync_channel(PCM_QUEUE_BLOCKS);
         let (ready_sender, ready_receiver) = sync_channel(1);
         let shared = Arc::new(Shared {
-            cancelled: AtomicBool::new(false),
-            finished: AtomicBool::new(false),
+            cancelled: Arc::new(AtomicBool::new(false)),
             state: AtomicU8::new(BUFFERING),
         });
         let worker_shared = Arc::clone(&shared);
         thread::Builder::new()
             .name("netodia-decoder".to_owned())
             .spawn(move || {
-                let mut source = match factory() {
+                let mut source = match factory(Arc::clone(&worker_shared.cancelled)) {
                     Ok(source) => source,
                     Err(error) => {
                         worker_shared.state.store(ENDED, Ordering::Release);
                         let _ = ready_sender.send(Err(error));
-                        worker_shared.finished.store(true, Ordering::Release);
                         return;
                     }
                 };
@@ -94,15 +101,12 @@ impl BufferedAudioSource {
                     let _ = ready_sender.send(Err(AppError::Player(
                         "Decoder produced no audio samples".to_owned(),
                     )));
-                    worker_shared.finished.store(true, Ordering::Release);
                     return;
                 }
                 if sender.send(first).is_err() {
-                    worker_shared.finished.store(true, Ordering::Release);
                     return;
                 }
                 if ready_sender.send(Ok(metadata)).is_err() {
-                    worker_shared.finished.store(true, Ordering::Release);
                     return;
                 }
 
@@ -112,7 +116,6 @@ impl BufferedAudioSource {
                         break;
                     }
                 }
-                worker_shared.finished.store(true, Ordering::Release);
             })
             .map_err(|error| AppError::io("Unable to start the audio decoder worker", error))?;
 
@@ -148,11 +151,13 @@ impl Iterator for BufferedAudioSource {
                 self.shared.state.store(PLAYING, Ordering::Release);
                 self.current.next()
             }
-            Err(TryRecvError::Empty) if !self.shared.finished.load(Ordering::Acquire) => {
+            Err(TryRecvError::Empty) => {
                 self.shared.state.store(BUFFERING, Ordering::Release);
                 None
             }
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => {
+            // Disconnection is observed only after every queued block is drained. A separate
+            // finished flag can race the producer's last send and discard that final block.
+            Err(TryRecvError::Disconnected) => {
                 self.shared.state.store(ENDED, Ordering::Release);
                 None
             }
@@ -187,6 +192,10 @@ impl AudioSource for BufferedAudioSource {
 
     fn is_buffering(&self) -> bool {
         self.state() == BufferState::Buffering
+    }
+
+    fn release_claims(&mut self) {
+        self.shared.cancelled.store(true, Ordering::Release);
     }
 
     fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
@@ -269,6 +278,24 @@ mod tests {
         fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
             Err(SeekError::NotSupported { underlying_source: "test source" })
         }
+    }
+
+    #[test]
+    fn retiring_a_buffered_source_cancels_its_blocking_reader() -> Result<(), AppError> {
+        let (sender, receiver) = sync_channel(1);
+        let mut source = BufferedAudioSource::open_cancellable(move |cancelled| {
+            let _ = sender.send(cancelled);
+            Ok(GatedSource { position: 0, release: Arc::new((Mutex::new(true), Condvar::new())) })
+        })?;
+        let cancelled = receiver
+            .recv()
+            .map_err(|_| AppError::Player("decoder cancellation flag missing".to_owned()))?;
+        assert!(!cancelled.load(Ordering::Acquire));
+
+        source.release_claims();
+
+        assert!(cancelled.load(Ordering::Acquire));
+        Ok(())
     }
 
     #[test]
