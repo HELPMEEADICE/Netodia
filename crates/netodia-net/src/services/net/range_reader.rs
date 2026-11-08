@@ -28,6 +28,9 @@ const REQUEST_TIMEOUT: Duration = Duration::from_mins(1);
 // A producer can sit idle behind the bounded PCM queue, or while paused. Reopen at its current
 // byte offset before the HTTP request's whole-body deadline, instead of resuming an expired body.
 const RESPONSE_REUSE_TIME: Duration = Duration::from_secs(REQUEST_TIMEOUT.as_secs() / 2);
+// Failed sockets must be discarded after a route change. Back off on the decoder worker while
+// the audio callback drains its PCM cache, then stays buffered at the same media position.
+const RECONNECT_DELAY: Duration = Duration::from_millis(250);
 
 /// A sanitized failure from an HTTP media source. It deliberately omits the URL, which may contain
 /// a signed CDN token.
@@ -91,6 +94,7 @@ pub struct RangeReader {
     media: Arc<Mutex<CachedMedia>>,
     position: u64,
     response: Option<RangeResponse>,
+    should_retry: Option<Box<dyn Fn() -> bool + Send + Sync>>,
 }
 
 impl RangeReader {
@@ -123,6 +127,7 @@ impl RangeReader {
                 })),
                 position: 0,
                 response: None,
+                should_retry: None,
             })
         } else if response.status().is_success() {
             let (file, byte_len) = spool(response)?;
@@ -135,6 +140,7 @@ impl RangeReader {
                 })),
                 position: 0,
                 response: None,
+                should_retry: None,
             })
         } else {
             Err(MediaError::HttpStatus(response.status().as_u16()))
@@ -157,6 +163,38 @@ impl RangeReader {
             media: Arc::clone(&self.media),
             position: 0,
             response: None,
+            should_retry: None,
+        }
+    }
+
+    /// Retries interrupted reads at the same byte offset while the decoder still wants them.
+    /// Configure this before moving the reader into a decoder; reopened cursors start without it.
+    pub fn retry_interrupted_reads(
+        &mut self,
+        should_retry: impl Fn() -> bool + Send + Sync + 'static,
+    ) {
+        self.should_retry = Some(Box::new(should_retry));
+    }
+
+    fn fill_range_with_recovery(&mut self) -> Result<Option<RangeChunk>, MediaError> {
+        loop {
+            match self.fill_range() {
+                Err(
+                    error @ (MediaError::Transport
+                    | MediaError::Timeout
+                    | MediaError::HttpStatus(408 | 429 | 500..=599)),
+                ) => {
+                    self.response = None;
+                    if !self.should_retry.as_ref().is_some_and(|retry| retry()) {
+                        return Err(error);
+                    }
+                    std::thread::sleep(RECONNECT_DELAY);
+                    if !self.should_retry.as_ref().is_some_and(|retry| retry()) {
+                        return Err(error);
+                    }
+                }
+                result => return result,
+            }
         }
     }
 
@@ -268,7 +306,7 @@ impl Read for RangeReader {
         } else {
             // No cache lock spans network I/O: the outgoing decoder can keep playing while a
             // replacement fetches the new target's first range.
-            match self.fill_range().map_err(io_error)? {
+            match self.fill_range_with_recovery().map_err(io_error)? {
                 Some(chunk) => copy_chunk(&chunk.bytes, self.position - chunk.start, buffer)?,
                 None => {
                     self.read_cached(buffer)?.ok_or_else(|| io_error(MediaError::InvalidRange))?
@@ -387,6 +425,7 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::net::{TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::thread;
 
@@ -439,6 +478,82 @@ mod tests {
             }
             Ok::<_, io::Error>(requests)
         })
+    }
+
+    /// The failed response delivers a complete chunk and part of the next one. Reconnecting
+    /// must keep the first chunk, discard the partial one, and deliver every byte exactly once.
+    #[test]
+    fn a_broken_response_resumes_without_losing_or_repeating_bytes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let url = listener_url(&listener)?;
+        let body: Vec<u8> =
+            (0..180_000).map(|index| u8::try_from(index % 251).unwrap_or_default()).collect();
+        let server_body = body.clone();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for (start, end, sent_end) in
+                [(0, 65_535, 65_535), (65_536, 179_999, 131_088), (131_072, 179_999, 179_999)]
+            {
+                let (mut stream, _) = listener.accept()?;
+                requests.push(request(&mut stream)?);
+                write!(
+                    stream,
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/180000\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    end - start + 1
+                )?;
+                stream.write_all(&server_body[start..=sent_end])?;
+            }
+            Ok::<_, io::Error>(requests)
+        });
+        let mut reader = RangeReader::open(&url)?;
+        reader.retry_interrupted_reads(|| true);
+
+        let mut received = Vec::new();
+        reader.read_to_end(&mut received)?;
+
+        let requests = server.join().map_err(|_| io::Error::other("range server panicked"))??;
+        assert_eq!(received, body);
+        assert!(requests[2].to_ascii_lowercase().contains("range: bytes=131072-179999\r\n"));
+        Ok(())
+    }
+
+    #[test]
+    fn cancelling_recovery_stops_a_failed_read_without_another_request()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let url = listener_url(&listener)?;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let server_cancelled = Arc::clone(&cancelled);
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept()?;
+            let _ = request(&mut stream)?;
+            write!(
+                stream,
+                "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-65535/180000\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n"
+            )?;
+            stream.write_all(&vec![42; 65_536])?;
+            drop(stream);
+            let (mut stream, _) = listener.accept()?;
+            let _ = request(&mut stream)?;
+            stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+            server_cancelled.store(true, Ordering::Release);
+            Ok::<_, io::Error>(())
+        });
+        let mut reader = RangeReader::open(&url)?;
+        reader.retry_interrupted_reads(move || !cancelled.load(Ordering::Acquire));
+        reader.seek(SeekFrom::Start(CHUNK_BYTES))?;
+
+        let result = reader.read(&mut [0; 8]);
+
+        server.join().map_err(|_| io::Error::other("range server panicked"))??;
+        let error = result.err().ok_or_else(|| io::Error::other("cancelled read succeeded"))?;
+        assert!(matches!(
+            error.get_ref().and_then(|error| error.downcast_ref::<MediaError>()),
+            Some(MediaError::HttpStatus(503))
+        ));
+        assert_eq!(reader.position, CHUNK_BYTES);
+        Ok(())
     }
 
     /// A precise MP3 seek scans headers from the start. More than the cache's worth of bytes
