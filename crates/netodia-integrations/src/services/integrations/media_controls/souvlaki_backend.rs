@@ -9,15 +9,22 @@ use tokio::sync::mpsc;
 
 use netodia_core::error::describe;
 use netodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent};
+#[cfg(windows)]
+use netodia_engine::player::engine::now_playing::SourceSummary;
 use netodia_engine::player::engine::state::{PlayerViewModelLight, amplitude_to_volume};
 use netodia_engine::player::engine::types::PlaybackStatus;
 
 use super::published::Published;
+#[cfg(windows)]
+use super::published::PublishedMetadata;
 use super::{cover_url, forward};
 
 /// How often a playing position is handed over. Both panels advance their own clock between
 /// updates, so this only has to keep the two from visibly diverging.
 const TIMELINE_REFRESH: Duration = Duration::from_secs(5);
+
+#[cfg(windows)]
+const METADATA_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Wrapper around souvlaki's `MediaControls`.
 /// `Option` allows graceful degradation when OS media controls are unavailable.
@@ -35,7 +42,48 @@ struct MediaControlsInner {
     event_tx: mpsc::Sender<PlayerEvent>,
     /// Last-synced state to avoid redundant SMTC calls on queue-only changes.
     published: Published,
+    #[cfg(windows)]
+    metadata_retry: MetadataRetry,
     last_timeline_push: Option<Instant>,
+}
+
+/// A rejected snapshot waits between state emits; changed metadata can publish at once.
+#[cfg(windows)]
+#[derive(Default)]
+enum MetadataRetry {
+    #[default]
+    Ready,
+    Pending {
+        source: Option<PublishedMetadata>,
+        after: Instant,
+    },
+}
+
+#[cfg(windows)]
+impl MetadataRetry {
+    fn publish<E: std::error::Error>(
+        &mut self,
+        source: Option<&SourceSummary<'_>>,
+        now: Instant,
+        send: impl FnMut(MediaMetadata<'_>) -> Result<(), E>,
+    ) -> bool {
+        if let Self::Pending { source: held, after } = self
+            && now < *after
+            && PublishedMetadata::still_current(held.as_ref(), source)
+        {
+            return false;
+        }
+        let sent = publish_metadata(source, send);
+        *self = if sent {
+            Self::Ready
+        } else {
+            Self::Pending {
+                source: source.map(PublishedMetadata::from),
+                after: now + METADATA_RETRY_INTERVAL,
+            }
+        };
+        sent
+    }
 }
 
 impl MediaControlsHandle {
@@ -66,6 +114,8 @@ impl MediaControlsHandle {
                 #[cfg(target_os = "windows")]
                 event_tx: tx,
                 published: Published::default(),
+                #[cfg(windows)]
+                metadata_retry: MetadataRetry::default(),
                 last_timeline_push: None,
             }),
         }
@@ -181,10 +231,21 @@ impl MediaControlsSync for MediaControlsHandle {
         let inner = &mut *guard;
 
         let changes = inner.published.changes(vm, status);
+        #[cfg(windows)]
+        let mut changes = changes;
         let Some(controls) = inner.controls.as_mut() else {
             return;
         };
 
+        #[cfg(windows)]
+        if changes.metadata {
+            changes.metadata =
+                inner.metadata_retry.publish(vm.source().as_ref(), Instant::now(), |metadata| {
+                    controls.set_metadata(metadata)
+                });
+        }
+
+        #[cfg(target_os = "macos")]
         if changes.metadata {
             let source = vm.source();
             if let Some(source) = source.as_ref() {
@@ -236,6 +297,61 @@ impl MediaControlsSync for MediaControlsHandle {
     }
 }
 
+/// Windows publishes the text only after loading the cover. Retry once without artwork so an
+/// unreadable file cannot keep the previous song on the panel. Accepted text settles this
+/// snapshot; changed artwork will trigger another publication.
+#[cfg(windows)]
+fn publish_metadata<E: std::error::Error>(
+    source: Option<&SourceSummary<'_>>,
+    mut send: impl FnMut(MediaMetadata<'_>) -> Result<(), E>,
+) -> bool {
+    let Some(source) = source else {
+        return match send(MediaMetadata {
+            title: Some(""),
+            artist: Some(""),
+            album: Some(""),
+            ..MediaMetadata::default()
+        }) {
+            Ok(()) => true,
+            Err(e) => {
+                log::debug!("Failed to clear media metadata: {}", describe(&e));
+                false
+            }
+        };
+    };
+
+    let artwork_url = source.artwork_path.and_then(cover_url);
+    let metadata = MediaMetadata {
+        title: Some(source.title),
+        artist: Some(source.secondary.unwrap_or("")),
+        album: Some(source.album.unwrap_or("")),
+        duration: source.duration_ms.map(Duration::from_millis),
+        cover_url: artwork_url.as_deref(),
+    };
+    match send(metadata.clone()) {
+        Ok(()) => true,
+        Err(e) => {
+            if metadata.cover_url.is_none() {
+                log::debug!("Failed to set media metadata: {}", describe(&e));
+                return false;
+            }
+            log::debug!("Failed to set media metadata with artwork: {}", describe(&e));
+            let text_only = MediaMetadata { cover_url: None, ..metadata };
+            match send(text_only) {
+                Ok(()) => true,
+                Err(e) => {
+                    log::debug!("Failed to set media metadata: {}", describe(&e));
+                    false
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "tests/souvlaki_backend_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "tests/metadata_publishing_tests.rs"]
+mod metadata_publishing_tests;
