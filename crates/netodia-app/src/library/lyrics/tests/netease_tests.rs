@@ -64,3 +64,40 @@ fn translation_is_still_shown_when_original_lyrics_are_missing() {
     let LyricsOutcome::Sheet(sheet) = outcome else { return };
     assert_eq!(sheet.lines[0].text, "译文");
 }
+
+#[test]
+fn parallel_lyrics_align_when_separators_differ_between_original_translation_and_romanization() {
+    // Certain tracks mix dot tags for credits with colon tags for body lines,
+    // while translation uses colons and romanization uses dots.
+    let response = CloudLyrics {
+        original: "[00:00.00]作词 : 作词人\n[00:00.03]作曲 : 作曲人\n[00:00:06]君のいない部屋で\n[00:04:22]思い出してしまうよ".to_owned(),
+        translation: "[00:00:06]在没有你的房间里\n[00:04:22]还是会不由自主地想起".to_owned(),
+        romanization: "[00:00.060]kimi no inai heya de\n[00:04.220]omoidashite shimau yo".to_owned(),
+    };
+    let outcome = parse_response(&response);
+    assert!(matches!(&outcome, LyricsOutcome::Sheet(_)), "expected sheet");
+    let LyricsOutcome::Sheet(sheet) = outcome else { return };
+
+    assert!(sheet.is_synced());
+    assert_eq!(sheet.lines.len(), 4);
+
+    assert_eq!(sheet.lines[0].at_ms, Some(0));
+    assert_eq!(sheet.lines[0].text, "作词 : 作词人");
+    assert_eq!(sheet.lines[0].translation, None);
+    assert_eq!(sheet.lines[0].romanization, None);
+
+    assert_eq!(sheet.lines[1].at_ms, Some(30));
+    assert_eq!(sheet.lines[1].text, "作曲 : 作曲人");
+    assert_eq!(sheet.lines[1].translation, None);
+    assert_eq!(sheet.lines[1].romanization, None);
+
+    assert_eq!(sheet.lines[2].at_ms, Some(60));
+    assert_eq!(sheet.lines[2].text, "君のいない部屋で");
+    assert_eq!(sheet.lines[2].translation.as_deref(), Some("在没有你的房间里"));
+    assert_eq!(sheet.lines[2].romanization.as_deref(), Some("kimi no inai heya de"));
+
+    assert_eq!(sheet.lines[3].at_ms, Some(4_220));
+    assert_eq!(sheet.lines[3].text, "思い出してしまうよ");
+    assert_eq!(sheet.lines[3].translation.as_deref(), Some("还是会不由自主地想起"));
+    assert_eq!(sheet.lines[3].romanization.as_deref(), Some("omoidashite shimau yo"));
+}

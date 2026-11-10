@@ -167,13 +167,13 @@ fn split_stamps(line: &str) -> (Vec<i64>, &str) {
     (stamps, rest)
 }
 
-/// `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` in milliseconds, taking `,` as a decimal point too.
+/// `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` in milliseconds, taking `,` and `:` as decimal points too.
 ///
 /// `None` for anything else, which is what drops every identification tag without a second rule
 /// to keep in step with this one: a key that is not a number is not a time.
 fn stamp_ms(inner: &str) -> Option<i64> {
     let (minutes, rest) = inner.split_once(':')?;
-    let (seconds, fraction) = rest.split_once(['.', ',']).unwrap_or((rest, ""));
+    let (seconds, fraction) = rest.split_once(['.', ',', ':']).unwrap_or((rest, ""));
     Some((digits(minutes)? * 60 + digits(seconds)?) * 1000 + fraction_ms(fraction)?)
 }
 
