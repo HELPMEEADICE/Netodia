@@ -135,9 +135,23 @@ fn pcm_sample(amplitude: f32) -> i16 {
     (amplitude * f32::from(i16::MAX)) as i16
 }
 
-/// [`common::pull`] in frames rather than samples, this suite counting the former throughout.
+/// Pull at the fixture's playback rate so long simulated blocks cannot outrun the decoder worker.
+/// The same pace is sufficient after a device reshape: the assertions count frames, not time.
 fn fill(src: &mut MixerPull, frames: usize) -> Vec<f32> {
-    common::pull(src, frames * usize::from(CHANNELS))
+    const BLOCK_FRAMES: usize = 4_096;
+    let channels = usize::from(CHANNELS);
+    let mut output = Vec::with_capacity(frames * channels);
+    let start = Instant::now();
+    for first in (0..frames).step_by(BLOCK_FRAMES) {
+        let micros = u64::try_from(first).unwrap_or(0) * 1_000_000 / u64::from(RATE);
+        let deadline = start + Duration::from_micros(micros);
+        if let Some(wait) = deadline.checked_duration_since(Instant::now()) {
+            std::thread::sleep(wait);
+        }
+        let count = (frames - first).min(BLOCK_FRAMES);
+        output.extend(common::pull(src, count * channels));
+    }
+    output
 }
 
 /// Pull `frames` frames and return the per-frame amplitude of channel 0.

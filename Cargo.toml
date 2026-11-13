@@ -73,7 +73,9 @@ futures-util = { version = "0.3.33", default-features = false, features = ["std"
 # Database
 # `macros` stays despite every query going through runtime `query_as`, because
 # `sqlx::migrate!` is re-exported only under `all(macros, migrate)`.
-sqlx = { version = "0.9.0", default-features = false, features = [
+# SQLx 0.9.0 caps libsqlite3-sys below 0.38; RUSTSEC-2026-0459 requires >=0.39.
+# Pin upstream's compatible driver until a crates.io release allows the patched SQLite.
+sqlx = { version = "0.9.0", git = "https://github.com/launchbadge/sqlx", rev = "987b8c5a74b6da8b71da6b5549925a7f6e59aac9", default-features = false, features = [
     "runtime-tokio",
     "sqlite",
     "migrate",

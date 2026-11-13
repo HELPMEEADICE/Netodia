@@ -18,6 +18,7 @@ use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use netodia_audio::player::source::audio::{AudioSource, SampleRate, Shape, SourceFormat};
+use netodia_audio::player::source::buffered::BufferedAudioSource;
 use netodia_audio::player::source::file_decode::FileDecoder;
 use netodia_core::error::{AppError, describe};
 use netodia_playback::player::playback::decks::Decks;
@@ -362,8 +363,11 @@ impl PlaybackEngine {
     ///
     /// # Errors
     ///
-    /// Whatever [`FileDecoder::open`] refuses the file with, the first time it is asked about.
-    pub(super) fn open_for_gapless(&self, path: &str) -> Result<Option<FileDecoder>, AppError> {
+    /// Failure to open the file or fill its initial PCM reserve.
+    pub(super) fn open_for_gapless(
+        &self,
+        path: &str,
+    ) -> Result<Option<BufferedAudioSource>, AppError> {
         if self.recorded_answer(path) == Some(false) {
             return Ok(None);
         }
@@ -373,7 +377,7 @@ impl PlaybackEngine {
             log::debug!("Not staging {path} gapless: the output reopens for its format");
             return Ok(None);
         }
-        Ok(Some(decoded))
+        BufferedAudioSource::from_positioned(decoded).map(Some)
     }
 
     /// Whether the file at `path` plays on the output as it is, by what opening it last found.

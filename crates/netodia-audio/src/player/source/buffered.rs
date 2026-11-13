@@ -12,6 +12,8 @@ use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Sou
 
 const PCM_BLOCK_SAMPLES: usize = 16 * 1024;
 const PCM_QUEUE_BLOCKS: usize = 24;
+// Four blocks give even 192 kHz stereo about 170 ms of decoded audio before playback starts.
+const LOCAL_PREFILL_BLOCKS: usize = 4;
 const SOURCE_POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 const BUFFERING: u8 = 0;
@@ -44,8 +46,8 @@ struct Metadata {
 
 /// A decoded source whose producer runs on a worker thread and whose consumer never waits.
 ///
-/// Open this on a blocking worker: it waits for the decoder to open and produce its first bounded
-/// PCM block, so the caller can build the output converter with a known shape. Subsequent network
+/// Open this outside the audio callback: it waits for the decoder and its initial PCM reserve,
+/// so the caller can build the output converter with a known shape. Subsequent
 /// reads and codec work happen on the detached producer thread. Dropping the source disconnects
 /// the bounded channel and asks that thread to stop.
 pub struct BufferedAudioSource {
@@ -65,9 +67,23 @@ impl BufferedAudioSource {
         Self::open_cancellable(move |_| factory())
     }
 
+    /// Move an already opened and positioned file decoder onto a worker. Wait for an initial
+    /// reserve (or EOF on a short file) before handing it to the output callback.
+    pub fn from_positioned<S: AudioSource + 'static>(source: S) -> Result<Self, AppError> {
+        Self::open_with_prefill(move |_| Ok(source), LOCAL_PREFILL_BLOCKS)
+    }
+
     /// Opens a decoder with a cancellation flag set when its buffered source is retired.
     /// Blocking readers can use it to stop reconnecting after a stop or track change.
     pub fn open_cancellable<F, S>(factory: F) -> Result<Self, AppError>
+    where
+        F: FnOnce(Arc<AtomicBool>) -> Result<S, AppError> + Send + 'static,
+        S: AudioSource + 'static,
+    {
+        Self::open_with_prefill(factory, 1)
+    }
+
+    fn open_with_prefill<F, S>(factory: F, prefill_blocks: usize) -> Result<Self, AppError>
     where
         F: FnOnce(Arc<AtomicBool>) -> Result<S, AppError> + Send + 'static,
         S: AudioSource + 'static,
@@ -96,15 +112,22 @@ impl BufferedAudioSource {
                     format: source.format(),
                     total_duration: source.total_duration(),
                 };
-                let first = read_block(&mut source, &worker_shared.cancelled);
-                if first.is_empty() {
-                    let _ = ready_sender.send(Err(AppError::Player(
-                        "Decoder produced no audio samples".to_owned(),
-                    )));
-                    return;
-                }
-                if sender.send(first).is_err() {
-                    return;
+                for index in 0..prefill_blocks {
+                    let block = read_block(&mut source, &worker_shared.cancelled);
+                    if block.is_empty() {
+                        // Publish EOF before letting the consumer pull a short file.
+                        drop(sender);
+                        let result = if index == 0 {
+                            Err(AppError::Player("Decoder produced no audio samples".to_owned()))
+                        } else {
+                            Ok(metadata)
+                        };
+                        let _ = ready_sender.send(result);
+                        return;
+                    }
+                    if sender.send(block).is_err() {
+                        return;
+                    }
                 }
                 if ready_sender.send(Ok(metadata)).is_err() {
                     return;
@@ -210,8 +233,12 @@ impl Drop for BufferedAudioSource {
 }
 
 fn read_block<S: AudioSource>(source: &mut S, cancelled: &AtomicBool) -> Vec<Sample> {
-    let mut block = Vec::with_capacity(PCM_BLOCK_SAMPLES);
-    while block.len() < PCM_BLOCK_SAMPLES && !cancelled.load(Ordering::Acquire) {
+    // A dry queue can interrupt playback at a block boundary. Keep that boundary on a whole
+    // frame so an underrun never loses a partial frame and shifts the remaining channels.
+    let channels = usize::from(source.channels().get());
+    let block_samples = (PCM_BLOCK_SAMPLES / channels).max(1) * channels;
+    let mut block = Vec::with_capacity(block_samples);
+    while block.len() < block_samples && !cancelled.load(Ordering::Acquire) {
         if let Some(sample) = source.next() {
             block.push(sample);
         } else if source.is_buffering() {
@@ -220,6 +247,7 @@ fn read_block<S: AudioSource>(source: &mut S, cancelled: &AtomicBool) -> Vec<Sam
             break;
         }
     }
+    block.truncate(block.len() / channels * channels);
     block
 }
 
@@ -231,6 +259,7 @@ mod tests {
 
     struct GatedSource {
         position: usize,
+        channels: ChannelCount,
         release: Arc<(Mutex<bool>, Condvar)>,
     }
 
@@ -256,7 +285,7 @@ mod tests {
 
     impl AudioSource for GatedSource {
         fn channels(&self) -> ChannelCount {
-            NonZero::<u16>::MIN
+            self.channels
         }
 
         fn sample_rate(&self) -> SampleRate {
@@ -285,7 +314,11 @@ mod tests {
         let (sender, receiver) = sync_channel(1);
         let mut source = BufferedAudioSource::open_cancellable(move |cancelled| {
             let _ = sender.send(cancelled);
-            Ok(GatedSource { position: 0, release: Arc::new((Mutex::new(true), Condvar::new())) })
+            Ok(GatedSource {
+                position: 0,
+                channels: NonZero::<u16>::MIN,
+                release: Arc::new((Mutex::new(true), Condvar::new())),
+            })
         })?;
         let cancelled = receiver
             .recv()
@@ -303,7 +336,7 @@ mod tests {
         let release = Arc::new((Mutex::new(false), Condvar::new()));
         let source_release = Arc::clone(&release);
         let mut source = BufferedAudioSource::open(move || {
-            Ok(GatedSource { position: 0, release: source_release })
+            Ok(GatedSource { position: 0, channels: NonZero::<u16>::MIN, release: source_release })
         })?;
 
         for _ in 0..PCM_BLOCK_SAMPLES {
@@ -329,5 +362,37 @@ mod tests {
         assert_eq!(recovered, Some(0.75));
         assert_eq!(source.state(), BufferState::Playing);
         Ok(())
+    }
+
+    #[test]
+    fn a_positioned_short_source_drains_to_eof_without_buffering() -> Result<(), AppError> {
+        let source = GatedSource {
+            position: 0,
+            channels: NonZero::<u16>::MIN,
+            release: Arc::new((Mutex::new(true), Condvar::new())),
+        };
+        let mut buffered = BufferedAudioSource::from_positioned(source)?;
+        let mut expected = vec![0.25; PCM_BLOCK_SAMPLES];
+        expected.push(0.75);
+
+        let samples: Vec<_> = buffered.by_ref().collect();
+
+        assert_eq!(samples, expected);
+        assert_eq!(buffered.state(), BufferState::Ended);
+        Ok(())
+    }
+
+    #[test]
+    fn a_three_channel_block_does_not_split_a_frame() {
+        let mut source = GatedSource {
+            position: 0,
+            channels: NonZero::new(3).unwrap_or(NonZero::<u16>::MIN),
+            release: Arc::new((Mutex::new(true), Condvar::new())),
+        };
+        let cancelled = AtomicBool::new(false);
+        let block = read_block(&mut source, &cancelled);
+        assert_eq!(block.len(), 16_383);
+        // The two samples left before EOF do not make a playable frame.
+        assert!(read_block(&mut source, &cancelled).is_empty());
     }
 }

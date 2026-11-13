@@ -25,6 +25,7 @@ use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use netodia_audio::player::source::audio::AudioSource;
+use netodia_audio::player::source::buffered::BufferedAudioSource;
 use netodia_audio::player::source::file_decode::FileDecoder;
 use netodia_core::error::AppError;
 use netodia_core::error::describe;
@@ -258,10 +259,8 @@ impl PlaybackEngine {
         let generation = self.reserve_playback_request();
         let fade_ms = self.manual_fade_ms(start_position_ms);
 
-        // Decode outside the deck lock — the position monitor's `query_position`
-        // shares this mutex, so a synchronous Symphonia probe under it stalls
-        // position publication. It is the only step that can be hoisted out;
-        // everything depending on *which* deck we land on is `start_track`'s.
+        // Probe, seek and prefill outside the deck lock. After mounting, the callback only
+        // pulls PCM that the decoder worker has already produced.
         let mut decoded = FileDecoder::open(Path::new(file_path))?;
 
         // One value for the decoder's seek and the deck's clock anchor both, so the two cannot
@@ -284,7 +283,8 @@ impl PlaybackEngine {
 
         // A manual fade is never asked for with a resume position, so the two can't both apply.
         let entry = if fade_ms > 0 { Entry::Fade(fade_ms) } else { Entry::Cut(start) };
-        self.start_track(decoded, baked_rg, entry, volume, speed, Some(generation));
+        let source = BufferedAudioSource::from_positioned(decoded)?;
+        self.start_track(source, baked_rg, entry, volume, speed, Some(generation));
         Ok(())
     }
 
@@ -395,7 +395,8 @@ impl PlaybackEngine {
     ) -> Result<(), AppError> {
         let generation = self.reserve_playback_request();
         // Decode outside the deck lock, as `play_media` does.
-        let decoded = FileDecoder::open(Path::new(file_path))?;
+        let source =
+            BufferedAudioSource::from_positioned(FileDecoder::open(Path::new(file_path))?)?;
 
         // A staged gapless source shares the active deck's fade cell and would fade out with the
         // track it follows. `crossfade_eligible` keeps the preload off for that, so one here is a
@@ -404,7 +405,7 @@ impl PlaybackEngine {
             !self.gapless_pending.load(Ordering::Acquire),
             "crossfade must never race a staged gapless preload"
         );
-        self.start_track(decoded, baked_rg, Entry::Fade(fade_ms), volume, speed, Some(generation));
+        self.start_track(source, baked_rg, Entry::Fade(fade_ms), volume, speed, Some(generation));
         Ok(())
     }
 
@@ -608,9 +609,16 @@ impl PlaybackEngine {
             return;
         }
 
+        let source = match BufferedAudioSource::from_positioned(decoded) {
+            Ok(source) => source,
+            Err(e) => {
+                log::warn!("Seek could not buffer the track: {}", describe(&e));
+                return;
+            }
+        };
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
+        deck.voice.replace(self.build_source(source, baked_rg, deck), position, mounted);
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.

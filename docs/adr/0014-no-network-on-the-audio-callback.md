@@ -37,3 +37,15 @@ playback monitor: that thread already holds the URL, the client and the ring, so
 keeps filling the same ring, the source never ends, the deck never blinks, and the state machine
 needs no reconnect path at all. Putting it in the monitor would mean handing the engine an HTTP
 client and inverting the dependency direction the crate graph exists to hold.
+
+**Amendment, 2026-11-11:** the same boundary now covers local file reads and packet decoding.
+Pulling a `FileDecoder` directly from the mixer made disk or codec stalls hold up the device
+callback even with real-time thread scheduling enabled. Local play, seek, crossfade and gapless
+preload now wrap the opened and positioned decoder in `BufferedAudioSource`. Its worker fills a
+bounded PCM queue; the callback only consumes samples already decoded there. Opening, seeking
+and waiting for the initial reserve happen outside the deck lock.
+
+Local sources prefill four blocks before mounting, or stop at EOF for short files. The existing
+24-block queue remains bounded to about 1.5 MiB of sample data per source. Blocks contain whole
+frames, so a temporary empty queue cannot shift channel alignment. This moves blocking work off
+the callback, but a producer stall longer than the queued audio can still exhaust that reserve.
