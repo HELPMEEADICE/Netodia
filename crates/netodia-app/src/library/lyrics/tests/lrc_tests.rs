@@ -48,6 +48,29 @@ fn a_comma_is_a_decimal_point() {
 }
 
 #[test]
+fn a_colon_is_a_decimal_point() {
+    // In-the-wild LRC providers (e.g. NetEase Cloud) use a third colon for fraction of a second.
+    assert_eq!(stamps("[00:01:25]a"), vec![Some(1_250)]);
+    assert_eq!(stamps("[00:00:06]a"), vec![Some(60)]);
+    assert_eq!(stamps("[00:04:22]a"), vec![Some(4_220)]);
+    assert_eq!(stamps("[00:04:220]a"), vec![Some(4_220)]);
+}
+
+#[test]
+fn colons_and_dots_mix_in_one_sheet() {
+    // Author tags often use dots while body lyrics use colons; neither drops the other.
+    assert_eq!(
+        drawn("[00:00.00]Author\n[00:00.03]Composer\n[00:00:06]First line\n[00:04:22]Second line"),
+        vec![
+            (Some(0), "Author".to_owned()),
+            (Some(30), "Composer".to_owned()),
+            (Some(60), "First line".to_owned()),
+            (Some(4_220), "Second line".to_owned()),
+        ]
+    );
+}
+
+#[test]
 fn minutes_are_not_capped_at_an_hour() {
     // A long recording is one file, and `mm` past 59 is how the format spells it.
     assert_eq!(stamps("[75:30.00]a"), vec![Some(4_530_000)]);
@@ -101,6 +124,10 @@ fn an_offset_past_the_first_stamp_clamps_at_the_start() {
 fn word_stamps_are_dropped_and_their_words_kept() {
     assert_eq!(
         drawn("[00:01.00]<00:01.00>one <00:01.50>two"),
+        vec![(Some(1_000), "one two".to_owned())]
+    );
+    assert_eq!(
+        drawn("[00:01:00]<00:01:00>one <00:01:50>two"),
         vec![(Some(1_000), "one two".to_owned())]
     );
 }
