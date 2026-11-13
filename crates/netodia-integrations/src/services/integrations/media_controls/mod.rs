@@ -71,6 +71,23 @@ fn forward(tx: &mpsc::Sender<PlayerEvent>, event: PlayerEvent) {
     }
 }
 
+/// Publishes only local covers. Remote artwork is downloaded through the app's capped fetch
+/// before its cache path replaces the queue's URL.
+#[cfg(windows)]
+fn cover_url(artwork_path: &str) -> Option<String> {
+    if !std::path::Path::new(artwork_path).is_absolute() {
+        return None;
+    }
+    // WinRT's file loader rejects forward slashes even in an absolute Windows path.
+    let artwork_path = artwork_path.replace('/', std::path::MAIN_SEPARATOR_STR);
+    Some(format!("file://{artwork_path}"))
+}
+
+#[cfg(not(windows))]
 fn cover_url(artwork_path: &str) -> String {
     format!("file://{artwork_path}")
 }
+
+#[cfg(all(test, windows))]
+#[path = "tests/cover_url_tests.rs"]
+mod tests;

@@ -114,6 +114,35 @@ fn a_view_model_already_recorded_changes_nothing() {
     assert_eq!(changes, NO_CHANGES);
 }
 
+#[test]
+#[cfg(windows)]
+fn a_failed_metadata_write_stays_pending_while_other_changes_are_recorded() {
+    let vm = playing();
+    let mut published = Published::default();
+    let changes = Changes { metadata: false, ..published.changes(&vm, PlaybackStatus::Playing) };
+
+    published.record(&vm, PlaybackStatus::Playing, changes);
+
+    assert_eq!(
+        published.changes(&vm, PlaybackStatus::Playing),
+        Changes { metadata: true, ..NO_CHANGES },
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn a_failed_clear_keeps_the_previously_published_metadata() {
+    let vm = playing();
+    let mut published = published_after(&vm);
+    let empty = PlayerViewModelLight { current_track: None, ..vm.clone() };
+    let changes = Changes { metadata: false, ..published.changes(&empty, PlaybackStatus::Stopped) };
+
+    published.record(&empty, PlaybackStatus::Stopped, changes);
+
+    assert!(PublishedMetadata::still_current(published.metadata.as_ref(), vm.source().as_ref()));
+    assert!(published.changes(&empty, PlaybackStatus::Stopped).metadata);
+}
+
 /// Each part moved alone flags that part and no other. A flag leaking into a neighbour is a signal
 /// nobody asked for, and on MPRIS a position leaking into `status` is exactly the periodic
 /// `PlaybackStatus` announcement this snapshot exists to stop.
