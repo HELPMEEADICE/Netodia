@@ -3989,7 +3989,7 @@ dependencies = [
 
 [[package]]
 name = "netodia"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "async-compat",
  "glob",
@@ -4018,7 +4018,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-app"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "blake3",
  "chrono",
@@ -4064,7 +4064,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-artwork"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "blake3",
  "color-thief",
@@ -4085,7 +4085,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-audio"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "lofty",
  "log",
@@ -4100,7 +4100,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-core"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "chrono",
  "dirs",
@@ -4119,7 +4119,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-engine"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "cpal",
  "log",
@@ -4138,7 +4138,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-integrations"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "log",
  "netodia-core",
@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-net"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -4178,7 +4178,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-platform"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "blake3",
  "chrono",
@@ -4204,7 +4204,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-playback"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "alsa",
  "biquad",
@@ -4227,7 +4227,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-store"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "blake3",
  "chrono",
@@ -4250,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-testkit"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "image",
  "tempfile",
@@ -4258,7 +4258,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-ui"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "slint",
  "slint-build",
@@ -4266,7 +4266,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-views"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "async-compat",
  "chrono",

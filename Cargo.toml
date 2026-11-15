@@ -18,7 +18,7 @@ exclude = ["winit"]
 # Inherited by every package. Release CI prepares this version from the tag;
 # `build-{rpm,appimage,tarball}.sh` read this table's first `version = `, so it stays first.
 [workspace.package]
-version = "0.1.5"
+version = "0.1.8"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
