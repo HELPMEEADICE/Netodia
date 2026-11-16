@@ -234,7 +234,8 @@ fn the_composite_wheel_arm_asks_for_a_frame() {
 
     assert!(!arm.is_empty(), "no `{ARM}` block found — the walk is broken, not the code");
     assert!(
-        arm.contains("request_redraw()"),
+        arm.contains("scroll_composite(&ui, dy)")
+            && block_after(&code, "fn scroll_composite(").contains("request_redraw()"),
         "the composite arm writes only properties nothing paints, so it must ask for the \
          frame its `changed` handler runs on:\n{arm}"
     );

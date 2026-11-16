@@ -470,16 +470,7 @@ fn on_mouse_wheel(
     let overlay_open = crate::ui::nav_history::overlay_open(&ui);
     match route_wheel(cs.get_hovered(), overlay_open, phase, dx, dy) {
         WheelRoute::Composite => {
-            // Accumulate rather than overwrite: the `changed wheel-tick`
-            // handler fires at most once per loop iteration, so several
-            // events before a re-eval would collapse to the last delta and
-            // under-scroll a fast flick. The view zeroes `wheel-dy` after
-            // applying, so this only sums within one un-applied frame.
-            cs.set_wheel_dy(cs.get_wheel_dy() + dy);
-            cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
-            // Nothing paints either property, so nothing else asks for the
-            // frame whose `new_events` runs the handler that applies them.
-            ui.window().request_redraw();
+            scroll_composite(&ui, dy);
             EventResult::PreventDefault
         }
         // `PointerScrolled` lands as a one-shot `TouchPhase::Cancelled`
@@ -498,6 +489,15 @@ fn on_mouse_wheel(
         }
         WheelRoute::Native => EventResult::Propagate,
     }
+}
+
+fn scroll_composite(ui: &AppWindow, dy: f32) {
+    let cs = ui.global::<CompositeScroll>();
+    // Several deltas can arrive before the view's changed handler consumes the sum.
+    cs.set_wheel_dy(cs.get_wheel_dy() + dy);
+    cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
+    // Neither property paints anything, so the changed handler needs an explicit frame.
+    ui.window().request_redraw();
 }
 
 #[cfg(test)]

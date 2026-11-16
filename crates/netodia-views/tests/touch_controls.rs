@@ -132,6 +132,15 @@ fn touch_taps_holds_and_pans_do_not_become_each_other() -> Result<(), Box<dyn Er
     assert_eq!(plays.get(), 1, "a swipe must not play its starting or ending row");
     assert_eq!(ui.global::<Queue>().get_drag_source(), -1, "a finger must not arm reordering");
 
+    advance(&elapsed, 10_000);
+    let settled_offset = ui.get_offset();
+    ui.global::<InputMode>().set_touch_active(false);
+    press(ui.window(), 290.0, 155.0);
+    advance(&elapsed, 120);
+    move_to(ui.window(), 290.0, 100.0);
+    release(ui.window(), 290.0, 100.0);
+    assert!((ui.get_offset() - settled_offset).abs() < 0.01, "mouse drags must not pan");
+
     ui.hide()?;
     Ok(())
 }
