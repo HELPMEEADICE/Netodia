@@ -70,7 +70,9 @@ fn touch_taps_holds_and_pans_do_not_become_each_other() -> Result<(), Box<dyn Er
     ui.show()?;
     ui.global::<InputMode>().set_touch_active(true);
     let mut pixels = vec![Rgb8Pixel::default(); 400 * 300];
-    window.draw_if_needed(|renderer| renderer.render(&mut pixels, 400));
+    window.draw_if_needed(|renderer| {
+        renderer.render(&mut pixels, 400);
+    });
 
     press(ui.window(), 40.0, 40.0);
     advance(&elapsed, 599);
