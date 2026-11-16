@@ -123,6 +123,15 @@ fn touch_taps_holds_and_pans_do_not_become_each_other() -> Result<(), Box<dyn Er
     release(ui.window(), 290.0, 24.0);
     assert_eq!(plays.get(), 1, "one touch tap must play a queue row once");
 
+    let mouse_offset = ui.get_offset();
+    ui.global::<InputMode>().set_touch_active(false);
+    press(ui.window(), 290.0, 155.0);
+    advance(&elapsed, 120);
+    move_to(ui.window(), 290.0, 100.0);
+    release(ui.window(), 290.0, 100.0);
+    assert!((ui.get_offset() - mouse_offset).abs() < 0.01, "mouse drags must not pan");
+
+    ui.global::<InputMode>().set_touch_active(true);
     press(ui.window(), 290.0, 155.0);
     advance(&elapsed, 120);
     move_to(ui.window(), 290.0, 110.0);
@@ -133,15 +142,6 @@ fn touch_taps_holds_and_pans_do_not_become_each_other() -> Result<(), Box<dyn Er
     assert!(ui.get_offset() > 20.0, "the finger must scroll a real ListView");
     assert_eq!(plays.get(), 1, "a swipe must not play its starting or ending row");
     assert_eq!(ui.global::<Queue>().get_drag_source(), -1, "a finger must not arm reordering");
-
-    advance(&elapsed, 10_000);
-    let settled_offset = ui.get_offset();
-    ui.global::<InputMode>().set_touch_active(false);
-    press(ui.window(), 290.0, 155.0);
-    advance(&elapsed, 120);
-    move_to(ui.window(), 290.0, 100.0);
-    release(ui.window(), 290.0, 100.0);
-    assert!((ui.get_offset() - settled_offset).abs() < 0.01, "mouse drags must not pan");
 
     ui.hide()?;
     Ok(())
