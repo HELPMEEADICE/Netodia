@@ -1,5 +1,6 @@
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView } from "../touch-scroll-view.slint";
 import { Theme } from "../../theme.slint";
+import { InputMode } from "../../globals/input-mode.slint";
 import { EntityStripRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
@@ -62,9 +63,6 @@ export component HorizontalCardStrip inherits Rectangle {
                 height: 100%;
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy:   always-off;
-                // A card click and a drag-pan are one gesture, and the default is
-                // the style's to pick; every entity-card grid sets it explicitly.
-                mouse-drag-pan-enabled: false;
                 viewport-height: self.height;
 
                 HorizontalLayout {
@@ -100,7 +98,7 @@ export component HorizontalCardStrip inherits Rectangle {
                             height: 36px;
                             border-radius: 18px;
                             background: Theme.accent;
-                            opacity: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
+                            opacity: InputMode.touch-active || play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
                             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
                             // `MaterialIcon`'s collapsed em-box, spelled inline

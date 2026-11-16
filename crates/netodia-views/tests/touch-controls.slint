@@ -1,0 +1,44 @@
+import { InputMode } from "../../netodia-ui/ui/globals/input-mode.slint";
+import { Queue } from "../../netodia-ui/ui/globals/queue.slint";
+import { TouchGesture } from "../../netodia-ui/ui/components/touch-gesture.slint";
+import { ListView } from "../../netodia-ui/ui/components/touch-scroll-view.slint";
+import { QueueRowItem } from "../../netodia-ui/ui/views/queue-row-item.slint";
+
+export { InputMode, Queue }
+
+export component TouchControlsWindow inherits Window {
+    width: 400px;
+    height: 300px;
+    out property <int> clicks;
+    out property <int> menus;
+    out property <length> offset: -list.viewport-y;
+
+    gesture := TouchGesture {
+        context-requested => { root.menus += 1; }
+    }
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: 140px;
+        height: 140px;
+        clicked => { if (!gesture.suppress-click) { root.clicks += 1; } }
+        pointer-event(ev) => { gesture.update(ev, self.mouse-x, self.mouse-y); }
+    }
+
+    list := ListView {
+        x: 160px;
+        y: 0;
+        width: 220px;
+        height: 200px;
+        vertical-scrollbar-policy: always-off;
+        horizontal-scrollbar-policy: always-off;
+        for i in 30: QueueRowItem {
+            row-data: { id: i + 1, title: "Touch row" };
+            row-index: i;
+            row-height: 46px;
+            list-y0: list.absolute-position.y;
+            list-height: list.height;
+            list-viewport-y: list.viewport-y;
+        }
+    }
+}

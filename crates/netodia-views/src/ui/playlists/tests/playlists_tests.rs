@@ -325,30 +325,14 @@ fn cloud_playlist_sort_covers_position_title_album_favorite_and_length() {
     assert_eq!(ids(&rows), [1, 3, 2]);
 }
 
-/// A row drag and the list's own drag-pan are one gesture, and whichever element
-/// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
-/// the drop never commits. The list around the rows opts out, and so does the
-/// queue sheet's. Nothing else catches a regression here — it compiles,
-/// reads clean, and only misbehaves on a list long enough to scroll.
-///
-/// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
-/// and is not one: every style but Material publishes this off, so that spelling
-/// *enabled* the pan on every sort that retires the drag.
+/// Both draggable lists inherit the shared finger-pan / mouse-reorder policy.
 #[test]
-fn every_draggable_list_opts_out_of_drag_panning() {
-    // The binding rather than the token: the property reads as an *enable*, so
-    // `mouse-drag-pan-enabled: true` is the likeliest wrong edit and a bare
-    // occurrence count can't fail on it.
-    let list = code_tokens(DRAGGABLE_LIST);
-    assert_eq!(
-        list.matches("mouse-drag-pan-enabled: false").count(),
-        1,
-        "`inner-list` must opt out, the only scroller the rows sit in"
-    );
-    assert!(
-        code_tokens(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
-        "every row in the queue sheet is draggable, so its ListView never gets the gesture"
-    );
+fn draggable_lists_keep_the_shared_touch_policy() {
+    for source in [DRAGGABLE_LIST, QUEUE_SHEET] {
+        let code = code_tokens(source);
+        assert!(code.contains("touch-scroll-view.slint"));
+        assert!(!code.contains("mouse-drag-pan-enabled:"));
+    }
 }
 
 /// All four terms, since each fails differently and only the first is obvious.

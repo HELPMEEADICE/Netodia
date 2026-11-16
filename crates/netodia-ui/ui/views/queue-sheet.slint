@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ListView } from "../components/touch-scroll-view.slint";
 import { Theme } from "../theme.slint";
 import { Dialog, DialogKind } from "../globals/dialog.slint";
 import { Queue } from "../globals/queue.slint";
@@ -286,11 +286,6 @@ export component QueueSheet inherits Rectangle {
                     // row hover pill paints under the scrollbar with no breathing room.
                     width: parent.width - 14px;
                     height: 100%;
-                    // Every row here is draggable, so the pan never gets the gesture:
-                    // it intercepts the row's grab mid-drag and the drop never commits.
-                    // Stated rather than inherited, the default being the style's to
-                    // pick; mechanism in `draggable-track-list.slint`.
-                    mouse-drag-pan-enabled: false;
                     for row[idx] in Queue.rows: QueueRowItem {
                         row-data: row;
                         row-index: idx;

@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { InputMode } from "../../globals/input-mode.slint";
 
 // Vertical EQ band slider, on the volume popup's shape. The fill runs from the
 // 0 dB centre line to the thumb, so a boost and a cut read apart at a glance.
@@ -110,10 +111,12 @@ export component EqBandSlider inherits Rectangle {
 
         pointer-event(ev) => {
             if (ev.kind == PointerEventKind.down) {
+                InputMode.control-pressed = true;
                 root.changed(self.value-from-y(self.mouse-y));
                 self.moved-since-press = true;
             }
             if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                InputMode.control-pressed = false;
                 if (self.moved-since-press) {
                     root.committed(self.value-from-y(self.mouse-y));
                 }

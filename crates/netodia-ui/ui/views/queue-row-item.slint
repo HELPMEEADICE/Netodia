@@ -1,4 +1,6 @@
 import { Theme } from "../theme.slint";
+import { InputMode } from "../globals/input-mode.slint";
+import { TouchGesture } from "../components/touch-gesture.slint";
 import { Queue } from "../globals/queue.slint";
 import { QueueRow } from "../models.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
@@ -39,7 +41,7 @@ export component QueueRowItem inherits Rectangle {
     property <bool> playing: root.row-index == Queue.current-index;
     property <bool> is-drag-source: root.row-index == Queue.drag-source;
     property <bool> selected: root.row-data.selected;
-    property <bool> show-checkbox: touch.has-hover || root.selected;
+    property <bool> show-checkbox: InputMode.touch-active || touch.has-hover || root.selected;
     // Once the sheet holds a selection the row body picks instead of doing nothing; the first
     // pick stays the checkbox's. The track lists' rule, spelled against the queue's own count.
     property <bool> selecting: Queue.selected-count > 0;
@@ -132,22 +134,34 @@ export component QueueRowItem inherits Rectangle {
         }
 
         // Grabbing only while actually pressing, not on idle hover.
+        gesture := TouchGesture {
+            context-requested => {
+                if (root.row-data.is_cloud) { cloud-menu.show(); }
+                else { ctx-menu.show(); }
+            }
+        }
+
         touch := TouchArea {
             mouse-cursor: self.pressed ? grabbing : default;
             // On `clicked` rather than the release, per `slint-pitfalls.md`, this row's checkbox
             // being hover-mounted too. Ahead of the drag commit below, which clears
             // `drag-started`: a row the user dragged must not also be picked.
             clicked => {
+                if (gesture.suppress-click) { return; }
                 if (root.selecting && !root.drag-started) {
                     root.pick(root.press-ctrl, root.press-shift);
+                } else if (gesture.is-touch) {
+                    Queue.skip-to(root.row-index);
                 }
             }
             double-clicked => {
-                if (!root.drag-started) {
+                if (!gesture.is-touch && !gesture.suppress-click && !root.drag-started) {
                     Queue.skip-to(root.row-index);
                 }
             }
             pointer-event(ev) => {
+                gesture.update(ev, self.absolute-position.x + self.mouse-x,
+                    self.absolute-position.y + self.mouse-y);
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                     // `clicked` carries no modifiers, so they are taken off the press.
                     root.press-ctrl = ev.modifiers.control;
@@ -157,7 +171,7 @@ export component QueueRowItem inherits Rectangle {
                     // Arm the ghost. The timer publishes `drag-source` a beat later so
                     // double-clicks don't flicker; a move past the threshold pre-empts
                     // it for an instant ghost on a real drag.
-                    root.arming-ghost = true;
+                    root.arming-ghost = !gesture.is-touch;
                     // -1 until the first `moved` past the threshold computes one; the
                     // sheet's insertion line gates on `>= 0`, so nothing paints during
                     // the press-only state.
@@ -204,7 +218,7 @@ export component QueueRowItem inherits Rectangle {
                 }
             }
             moved => {
-                if (self.pressed) {
+                if (self.pressed && !gesture.is-touch) {
                     if (!root.drag-started
                         && Math.abs((self.absolute-position.y + self.mouse-y) - root.press-abs-y) > 4px) {
                         root.drag-started = true;
@@ -276,11 +290,14 @@ export component QueueRowItem inherits Rectangle {
                                 // picks too. Modifiers ride through `ev.modifiers`.
                                 cb-touch := TouchArea {
                                     mouse-cursor: pointer;
+                                    property <bool> press-ctrl;
+                                    property <bool> press-shift;
+                                    clicked => { root.pick(self.press-ctrl, self.press-shift); }
                                     pointer-event(ev) => {
-                                        if (ev.kind == PointerEventKind.up
+                                        if (ev.kind == PointerEventKind.down
                                             && ev.button == PointerEventButton.left) {
-                                            root.pick(
-                                                ev.modifiers.control, ev.modifiers.shift);
+                                            self.press-ctrl = ev.modifiers.control;
+                                            self.press-shift = ev.modifiers.shift;
                                         }
                                     }
                                 }

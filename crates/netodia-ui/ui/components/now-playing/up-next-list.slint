@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ListView } from "../touch-scroll-view.slint";
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue, NowPlaying } from "../../globals/queue.slint";
@@ -159,9 +159,6 @@ export component UpNextList inherits Rectangle {
         // The `OverlayScrollbar` below is the only scrollbar.
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
-        // A row click jumps the queue, so it answers the way a card does; argument on
-        // the other card grids.
-        mouse-drag-pan-enabled: false;
         x: 0;
         // Starts one row-height off rest on a track change and slides in. The sign
         // comes from `slide-direction`: forward slides up, rewound slides down.

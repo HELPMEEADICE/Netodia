@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ListView } from "../../components/touch-scroll-view.slint";
 import { Theme } from "../../theme.slint";
 import { Favorites } from "../../globals/curated.slint";
 import { CloudTrackActions } from "../../globals/cloud-track-actions.slint";
@@ -53,7 +53,6 @@ export component CloudFavoritesAlbumsTab inherits Rectangle {
                 height: 100%;
                 vertical-scrollbar-policy: always-off;
                 horizontal-scrollbar-policy: always-off;
-                mouse-drag-pan-enabled: false;
 
                 for row in Favorites.album-rows: Rectangle {
                     min-height: geometry.row-h;

@@ -1,0 +1,7 @@
+// Kept by the winit filter before dispatch, so even the first finger press can pan a list.
+// Stays on after release to keep controls discoverable until a mouse button or wheel is used.
+export global InputMode {
+    in-out property <bool> touch-active: false;
+    // A slider owns its drag even when it shares the page's scrolling axis.
+    in-out property <bool> control-pressed: false;
+}

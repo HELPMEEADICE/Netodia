@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ListView } from "../touch-scroll-view.slint";
 import { ArtistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
@@ -30,9 +30,6 @@ export component ArtistGrid inherits Rectangle {
     list := ListView {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
-        // A card click and a drag-pan are one gesture, and the default is the style's to pick;
-        // argument on the entity-card grids.
-        mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {
             min-height: root.row-height;

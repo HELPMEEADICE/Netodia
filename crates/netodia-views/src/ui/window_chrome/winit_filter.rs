@@ -45,8 +45,8 @@ use slint::{ComponentHandle, SharedString};
 use netodia_app::state::AppState;
 use netodia_core::error::describe;
 use netodia_ui::{
-    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
-    WindowChrome,
+    AppWindow, CompositeScroll, DragRegion, InputMode, PlaylistDetail, PopupHighlight, Queue,
+    Theme, WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
@@ -157,8 +157,26 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
     let mut double_press = DoublePress::default();
+    let mut chrome_touch = None;
     let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
+        // Before Slint sees the press: its styled scrollers otherwise reject finger panning too.
+        if let Some(ui) = weak.upgrade() {
+            match event {
+                WindowEvent::Touch(touch) => {
+                    ui.global::<InputMode>().set_touch_active(true);
+                    if matches!(touch.phase, TouchPhase::Started | TouchPhase::Cancelled) {
+                        ui.global::<InputMode>().set_control_pressed(false);
+                    }
+                }
+                WindowEvent::MouseInput { state: ElementState::Pressed, .. }
+                | WindowEvent::MouseWheel { .. } => {
+                    ui.global::<InputMode>().set_touch_active(false);
+                    ui.global::<InputMode>().set_control_pressed(false);
+                }
+                _ => {}
+            }
+        }
         match event {
             WindowEvent::Resized(size) => resize_watch.resized(w, *size),
             WindowEvent::CursorMoved { .. }
@@ -199,6 +217,44 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             } => nav_button(&weak, &state, *button),
             WindowEvent::MouseInput { state: ElementState::Released, .. } => {
                 release_popup_highlight(&weak);
+                EventResult::Propagate
+            }
+            WindowEvent::Touch(touch) => {
+                let contact = (touch.device_id, touch.id);
+                if touch.phase == TouchPhase::Started {
+                    chrome_touch = None;
+                    let p = touch.location.to_logical::<f32>(f64::from(w.scale_factor()));
+                    let position = slint::LogicalPosition::new(p.x, p.y);
+                    // Fingers have no preceding hover. Hit-test this position before consulting
+                    // the chrome cells, which still describe the last mouse position otherwise.
+                    if let Err(e) = w
+                        .try_dispatch_event(slint::platform::WindowEvent::PointerMoved { position })
+                    {
+                        log::warn!("touch hover: dispatch: {}", describe(&e));
+                    } else if let Some(direction) = resize.get() {
+                        chrome_touch = Some(contact);
+                        start_os_drag(w, "touch resize", |ww| ww.drag_resize_window(direction));
+                        return EventResult::PreventDefault;
+                    } else if drag_region.get() != DragRegion::None {
+                        chrome_touch = Some(contact);
+                        return drag_press(
+                            w,
+                            &weak,
+                            &mut double_press,
+                            drag_region.get(),
+                            position,
+                        );
+                    }
+                }
+                if chrome_touch == Some(contact) {
+                    if matches!(touch.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
+                        chrome_touch = None;
+                    }
+                    return EventResult::PreventDefault;
+                }
+                if matches!(touch.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
+                    release_popup_highlight(&weak);
+                }
                 EventResult::Propagate
             }
             WindowEvent::Resized(_) => on_resized(w, &weak),

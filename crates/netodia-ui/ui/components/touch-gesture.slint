@@ -1,0 +1,47 @@
+// Shares long-press timing and motion cancellation without wrapping the host's TouchArea:
+// wrapping would lose press/up to the deepest item and break row capture.
+import { InputMode } from "../globals/input-mode.slint";
+
+export component TouchGesture {
+    in property <bool> context-enabled: true;
+    out property <bool> is-touch;
+    out property <bool> suppress-click;
+    callback context-requested();
+
+    private property <bool> armed;
+    private property <length> start-x;
+    private property <length> start-y;
+    private property <length> slop: 8px;
+
+    // Window coordinates keep a moving/virtualized row from moving the gesture's origin.
+    public function update(ev: PointerEvent, x: length, y: length) {
+        if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+            root.is-touch = InputMode.touch-active;
+            root.suppress-click = false;
+            root.start-x = x;
+            root.start-y = y;
+            root.armed = InputMode.touch-active && root.context-enabled;
+        }
+        if (ev.kind == PointerEventKind.move && root.is-touch
+            && (Math.abs(x - root.start-x) > root.slop || Math.abs(y - root.start-y) > root.slop)) {
+            root.armed = false;
+            root.suppress-click = true;
+        }
+        if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+            root.armed = false;
+        }
+        if (ev.kind == PointerEventKind.cancel) {
+            root.suppress-click = true;
+        }
+    }
+
+    Timer {
+        interval: 600ms;
+        running: root.armed;
+        triggered => {
+            root.armed = false;
+            root.suppress-click = true;
+            root.context-requested();
+        }
+    }
+}

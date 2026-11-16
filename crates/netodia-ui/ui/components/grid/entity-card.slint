@@ -1,4 +1,6 @@
 import { Theme } from "../../theme.slint";
+import { InputMode } from "../../globals/input-mode.slint";
+import { TouchGesture } from "../touch-gesture.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { Checkbox } from "../checkbox.slint";
 import { MaterialIcon } from "../material-icon.slint";
@@ -86,7 +88,7 @@ export component EntityCard inherits Rectangle {
     // The box takes the badge corner while it is up, which is the grid's reading of the track
     // row swapping its number for a checkbox. Idle and unselected it is gone and the badge is
     // back, so a card nobody is pointing at looks exactly as it did.
-    private property <bool> box-shown: root.selectable && (root.card-hovered || root.selected);
+    private property <bool> box-shown: root.selectable && (InputMode.touch-active || root.card-hovered || root.selected);
 
     // One click cannot both pick and open, so a live selection costs the detail until it is
     // cleared. The first pick is still the box's, which is what keeps an idle grid navigable.
@@ -195,6 +197,11 @@ export component EntityCard inherits Rectangle {
         }
     }
 
+    gesture := TouchGesture {
+        context-enabled: root.selectable;
+        context-requested => { root.context-requested(touch.mouse-x, touch.mouse-y); }
+    }
+
     touch := TouchArea {
         // A disabled TouchArea processes nothing, so a dimmed card gets no hover
         // background, no cover zoom and no click — the `TrackListRowItem` contract.
@@ -204,6 +211,7 @@ export component EntityCard inherits Rectangle {
         // also means `picking` is read once, so unpicking the last card cannot open its detail on
         // the way out.
         clicked => {
+            if (gesture.suppress-click) { return; }
             if (root.picking) {
                 root.pick(root.press-shift);
             } else {
@@ -211,6 +219,8 @@ export component EntityCard inherits Rectangle {
             }
         }
         pointer-event(ev) => {
+            gesture.update(ev, self.absolute-position.x + self.mouse-x,
+                self.absolute-position.y + self.mouse-y);
             // `clicked` carries no modifiers, so the shift a range-pick needs is taken off the
             // press that armed it.
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
@@ -239,7 +249,7 @@ export component EntityCard inherits Rectangle {
         width: root.tile-size;
         height: root.tile-size;
 
-        opacity: root.card-hovered ? 1.0 : 0.0;
+        opacity: InputMode.touch-active || root.card-hovered ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
         @children
@@ -344,14 +354,16 @@ export component EntityCard inherits Rectangle {
             // that also happens to make disabled cards unselectable.
             enabled: root.enabled;
             mouse-cursor: pointer;
+            property <bool> press-shift;
+            clicked => { root.pick(self.press-shift); }
             // **Ctrl is forced on unless shift is held**, the track row's box verbatim: a
             // checkbox means "add or remove this one", so a plain click has to toggle. Passing
             // the raw modifiers instead sends an unmodified click down the replace-the-selection
             // arm, which makes a ticked box impossible to untick and a second card impossible
             // to add — the whole feature, lost to one plausible-looking line.
             pointer-event(ev) => {
-                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                    root.pick(ev.modifiers.shift);
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    self.press-shift = ev.modifiers.shift;
                 }
                 // This area sits over the card's own `touch`, which never sees a press inside it,
                 // so without this the corner is a hole in the card's right-click. Offset by the

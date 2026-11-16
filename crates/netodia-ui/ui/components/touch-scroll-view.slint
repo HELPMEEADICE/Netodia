@@ -1,0 +1,11 @@
+import { ListView as StandardListView, ScrollView as StandardScrollView } from "std-widgets.slint";
+import { InputMode } from "../globals/input-mode.slint";
+
+// Mouse drags belong to row reordering; finger drags belong to the scroller, including its fling.
+export component ListView inherits StandardListView {
+    mouse-drag-pan-enabled: InputMode.touch-active && !InputMode.control-pressed;
+}
+
+export component ScrollView inherits StandardScrollView {
+    mouse-drag-pan-enabled: InputMode.touch-active && !InputMode.control-pressed;
+}

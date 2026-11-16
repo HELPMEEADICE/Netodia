@@ -1,4 +1,6 @@
 import { Theme } from "../../theme.slint";
+import { InputMode } from "../../globals/input-mode.slint";
+import { TouchGesture } from "../touch-gesture.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
 import { RowCovers } from "../../globals/tracks.slint";
 import { MaterialIcon } from "../material-icon.slint";
@@ -235,6 +237,14 @@ export component TrackListRowItem inherits Rectangle {
         // with the cells outside `touch`, moving onto `cb-touch` flipped `touch.has-hover` false,
         // unmounted the checkbox mid-move and lost the click. Wrapping fixes hover and hit-testing
         // at once: the deepest TouchArea wins, and plain Rectangles pass clicks through.
+        gesture := TouchGesture {
+            context-requested => {
+                if (root.cloud-row) { cloud-menu.show(); }
+                else { ctx-menu.show(); }
+                root.request-blur-search();
+            }
+        }
+
         touch := TouchArea {
             // A disabled TouchArea processes nothing, so disk-only rows get no hover background,
             // no checkbox swap-in and no double-click.
@@ -251,6 +261,7 @@ export component TrackListRowItem inherits Rectangle {
             // `slint-pitfalls.md`'s grab-invalidation entry. It runs before `pointer-event`, so
             // `drag-started` still holds the value the block below is about to reset.
             clicked => {
+                if (gesture.suppress-click) { return; }
                 if (root.enabled && !root.drag-started && root.artist-link-pressed) {
                     if (root.cloud-row) {
                         ArtistPicker.request-cloud(root.row-data.remote_id);
@@ -263,17 +274,20 @@ export component TrackListRowItem inherits Rectangle {
                     } else {
                         root.go-to-album(root.row-data.album_id);
                     }
-                } else if (root.enabled && root.cloud-row && root.single-click-play) {
+                } else if (root.enabled && root.cloud-row && (root.single-click-play || gesture.is-touch)) {
                     root.clicked-row();
                 } else if (!root.cloud-row && root.enabled && !root.drag-started) {
                     if (root.selecting) {
                         root.pick(root.press-shift);
+                    } else if (gesture.is-touch) {
+                        root.double-clicked-row();
                     }
                 }
             }
             // Still plays while a selection is live: the two clicks pick and unpick, so the set
             // comes out where it started.
             double-clicked => {
+                if (gesture.is-touch || gesture.suppress-click) { return; }
                 if (!root.cloud-row) { root.double-clicked-row(); }
                 else if (!root.single-click-play) { root.clicked-row(); }
             }
@@ -281,6 +295,8 @@ export component TrackListRowItem inherits Rectangle {
             // focus. Drag press/up tracking shares this handler, `touch` being where Slint
             // delivers them.
             pointer-event(ev) => {
+                gesture.update(ev, self.absolute-position.x + self.mouse-x,
+                    self.absolute-position.y + self.mouse-y);
                 // `clicked` carries no modifiers, so the shift a range-pick needs is taken off
                 // the press that armed it.
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
@@ -296,7 +312,7 @@ export component TrackListRowItem inherits Rectangle {
                     root.request-blur-search();
                 }
                 // Drag-reorder tracking — opt-in via `enable-drag`.
-                if (root.enable-drag) {
+                if (root.enable-drag && !gesture.is-touch) {
                     if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                         root.drag-press-abs-y = self.absolute-position.y + self.pressed-y;
                         root.drag-started = false;
@@ -331,7 +347,7 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
             moved => {
-                if (!root.enable-drag) {
+                if (!root.enable-drag || gesture.is-touch) {
                     return;
                 }
                 if (self.pressed) {
@@ -370,7 +386,7 @@ export component TrackListRowItem inherits Rectangle {
                 clip: true;
                 VerticalLayout {
                     alignment: center;
-                    if root.cloud-row || (!touch.has-hover && !root.selected): Text {
+                    if root.cloud-row || (!InputMode.touch-active && !touch.has-hover && !root.selected): Text {
                         // `track_number` falls back to the row position when the tag
                         // is missing; `index` counts down N..1 under a descending
                         // sort so the column itself reads as sorted.
@@ -387,7 +403,7 @@ export component TrackListRowItem inherits Rectangle {
                     }
                     // Hollow on hover, filled accent when selected. Owns its own
                     // TouchArea so the box drives selection independently of the row.
-                    if !root.cloud-row && (touch.has-hover || root.selected): Checkbox {
+                    if !root.cloud-row && (InputMode.touch-active || touch.has-hover || root.selected): Checkbox {
                         checked: root.selected;
                         // The rim stands in for the number it replaced, so it takes
                         // that cell's ink rather than the quieter default.
@@ -395,12 +411,18 @@ export component TrackListRowItem inherits Rectangle {
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
+                            property <bool> press-shift;
+                            clicked => {
+                                if (root.enabled) {
+                                    root.pick(self.press-shift);
+                                    root.request-blur-search();
+                                }
+                            }
                             // Plain click toggles this row in or out; shift
                             // range-selects against the anchor.
                             pointer-event(ev) => {
-                                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left && root.enabled) {
-                                    root.pick(ev.modifiers.shift);
-                                    root.request-blur-search();
+                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                                    self.press-shift = ev.modifiers.shift;
                                 }
                             }
                         }

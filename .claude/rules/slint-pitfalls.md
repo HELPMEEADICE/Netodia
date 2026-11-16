@@ -182,37 +182,17 @@ this file is what builds, looks right, and is wrong.
   Slint's kinetic fling, gated on that same flag. `MouseWheel` carries no position, hence the
   `CursorMoved` mirror beside it.
 
-- **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
-  per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
-  element can own it. **Which one wins is the *style's* answer rather than Slint's**, and the
-  property is the styled widget's, not the item's: `ScrollView` publishes
-  `mouse-drag-pan-enabled <=> flickable.interactive`, and while the bare `Flickable.interactive`
-  does default **`true`**, fluent, cupertino, cosmic and qt each pin `interactive: false` inside
-  their own `ScrollView`. Material is the one that doesn't, which is what the Slint docs mean by
-  "defaults to `true` for the Material style and `false` for all other styles".
-  `ListView inherits ScrollView`, so it takes the same answer, and the tree declares no bare
-  `Flickable` at all. Netodia sets no style and `i-slint-compiler`'s `typeloader.rs` resolves it to
-  **fluent**, so the live default here is *off* and every scroller binding nothing already
-  compiles to `false`. What the opt-outs buy is therefore a pin rather than an override: no
-  click-to-act list depends on which style compiled. **Verify in the generated file, never in the
-  `.slint`** — the value is inlined per instance, so a source binding and an inherited default are
-  the same line.
-  Where the pan *is* on, a press inside one returns `DelayForwarding`, and `handle_mouse_grab`
-  (`input.rs`) re-consults exactly those ancestors *during* the inner grab; past
-  `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
-  `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
-  `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
-  arrives. **The row arms at 4 px, i.e. inside that window**, so the failure is total rather than
-  occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
-  indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
-  than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
-  `queue-sheet.slint`'s, pinned by
-  `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
-  under a pointer; the click-to-act grids and lists are pinned by `crates/netodia/tests/scrollbars.rs`.
-  **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
-  as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
-  drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+- **A row reorder and drag-to-pan compete for the same grab.** Every styled scroller is
+  imported from `components/touch-scroll-view.slint`, which enables panning only for
+  `InputMode.touch-active` and yields to a pressed slider. The winit filter sets that flag
+  before dispatching a finger press; a mouse button or wheel turns it off. The mode survives
+  release so selection boxes and card actions stay visible without hover. Do not override
+  `mouse-drag-pan-enabled` at a mount or import the stock scrollers directly — held by
+  `crates/netodia/tests/scrollbars.rs`.
+  Slint intercepts a pan past 8 px within 500 ms and cancels the child grab; the reorder
+  arms at 4 px, so both track and queue rows snapshot the input mode and refuse to arm
+  reordering for a finger. `TouchGesture` owns the long-press timer and motion cancellation,
+  with real input/timing coverage in `netodia-views/tests/touch_controls.rs`.
 
 - **A grabbing item that unmounts mid-gesture hands its release to the ancestor, as a fresh
   event.** `handle_mouse_grab` walks the `item_stack` upgrading each weak ref, and a grabber whose

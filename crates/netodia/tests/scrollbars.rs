@@ -34,22 +34,6 @@ const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
 
-/// The card surfaces, every one of them click-to-open. Scoped to the directory rather than
-/// listed, so a new one is held on the day it lands.
-const GRID_DIR: &str = "components/grid/";
-
-/// The click-to-act lists outside [`GRID_DIR`], which no directory scope reaches.
-///
-/// `track-list.slint` is deliberately absent: a row click there is a selection rather than
-/// a navigation, so it takes whatever the style publishes. `draggable-track-list.slint` is
-/// absent for the opposite reason, its two bindings being pinned by an exact count in
-/// `ui::playlists::tests` instead, a drag there being the reorder itself.
-const CARD_SHAPED_LISTS: [&str; 2] =
-    ["views/browse-view.slint", "components/now-playing/up-next-list.slint"];
-
-const DRAG_PAN: &str = "mouse-drag-pan-enabled:";
-const DRAG_PAN_OPT_OUT: &str = "false";
-
 /// The two components that own a `TrackList`'s bar — the plain page and the
 /// nested-under-another-scroller case. They are the only files allowed to bind a list's
 /// vertical metrics onto an `OverlayScrollbar`.
@@ -124,11 +108,6 @@ fn own_policies(body: &str) -> Vec<(&str, &str)> {
     out
 }
 
-/// Whether `body` turns drag-to-pan off at its own depth.
-fn opts_out_of_drag_pan(body: &str) -> bool {
-    own_property(body, DRAG_PAN).contains(&DRAG_PAN_OPT_OUT)
-}
-
 /// The check that catches an omission, which is the shape most drift takes.
 #[test]
 fn every_scroller_opts_out_of_the_stock_scrollbar() {
@@ -159,61 +138,30 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
     );
 }
 
-/// A card click and a drag-pan are one gesture, and which of them a grid gets is the
-/// *style's* answer unless the grid states one: every style but Material publishes
-/// `mouse-drag-pan-enabled` off, so a scroller binding nothing rides a default no file here
-/// owns. Where the pan is on, 8 px of travel inside 500 ms hands the flickable the grab and
-/// every item under it is sent a cancel, so a press that drifts that far never lands as a
-/// click — "sometimes it doesn't open", on a grid long enough to flick and nowhere else.
-/// Entity-card grids carry the argument.
+/// Scrolling must work on the first touch and must leave mouse drags to row reordering.
+/// The shared widgets own that switch, so no host can silently inherit a style's mouse default.
 #[test]
-fn every_grid_scroller_opts_out_of_drag_to_pan() {
+fn every_scroller_uses_the_touch_aware_widgets() {
     let sources = sources();
     let mut blocks = 0usize;
     let mut offenders = Vec::new();
 
-    for (path, src) in sources.iter().filter(|(path, _)| path.contains(GRID_DIR)) {
+    for (path, src) in &sources {
         for (element, body) in scroller_blocks(src) {
             blocks += 1;
-            if !opts_out_of_drag_pan(body) {
-                offenders.push(format!("{path}: {element} does not set {DRAG_PAN} false"));
+            let imports_shared = src.lines().any(|line| {
+                line.starts_with("import {")
+                    && line.contains(element)
+                    && line.contains("touch-scroll-view.slint")
+            });
+            if !imports_shared || !own_property(body, "mouse-drag-pan-enabled:").is_empty() {
+                offenders.push(format!("{path}: {element} bypasses the shared touch policy"));
             }
         }
     }
 
-    assert!(blocks >= 7, "only {blocks} grid scrollers found — the walk is broken");
-    assert!(
-        offenders.is_empty(),
-        "a card grid's delegates are click-to-open, so drag-to-pan costs a click it \
-         intercepts and buys a gesture nothing here wants:\n{}",
-        offenders.join("\n")
-    );
-}
-
-/// [`every_grid_scroller_opts_out_of_drag_to_pan`] for the click-to-act lists a directory
-/// scope can't reach. Per file rather than per block, which is the granularity
-/// [`CARD_SHAPED_LISTS`] is written at: Browse mounts the page scroller its folder list sits
-/// inside, and that one wraps a `TrackList` that keeps the default.
-#[test]
-fn every_card_shaped_list_opts_out_of_drag_to_pan() {
-    let sources = sources();
-    let mut offenders = Vec::new();
-
-    for name in CARD_SHAPED_LISTS {
-        let Some((path, src)) = sources.iter().find(|(path, _)| path.as_str() == name) else {
-            offenders.push(format!("{name}: named here but not in the tree"));
-            continue;
-        };
-        if !scroller_blocks(src).into_iter().any(|(_, body)| opts_out_of_drag_pan(body)) {
-            offenders.push(format!("{path}: no scroller sets {DRAG_PAN} false"));
-        }
-    }
-
-    assert!(
-        offenders.is_empty(),
-        "these lists act on a click the way a card does, so they answer the same way:\n{}",
-        offenders.join("\n")
-    );
+    assert!(blocks >= 20, "only {blocks} scrollers found — the walk is broken");
+    assert!(offenders.is_empty(), "{}", offenders.join("\n"));
 }
 
 /// Both block walks key on [`SCROLLERS`], so what makes them complete is that nothing

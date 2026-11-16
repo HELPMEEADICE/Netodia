@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ListView } from "../touch-scroll-view.slint";
 import { Theme } from "../../theme.slint";
 import { ListTravel } from "../../globals/list-travel.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
@@ -117,13 +117,6 @@ export component DraggableTrackList inherits Rectangle {
             vertical-stretch: 1;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A row drag and a drag-pan are one gesture and only one element
-            // can own it: Slint re-consults the `Flickable` *during* the row's
-            // grab and intercepts at 8px of travel, which reaches the row as a
-            // pointer cancel rather than the release that commits. The row arms
-            // at 4px, inside that window. Stated rather than inherited, the
-            // default being the style's to pick; entity-card grids set it explicitly.
-            mouse-drag-pan-enabled: false;
             for r[idx] in root.rows: TrackListRowItem {
                 row-data: r;
                 row-index: idx;

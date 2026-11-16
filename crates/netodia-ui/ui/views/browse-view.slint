@@ -1,4 +1,4 @@
-import { ListView, ScrollView } from "std-widgets.slint";
+import { ListView, ScrollView } from "../components/touch-scroll-view.slint";
 import { Theme } from "../theme.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
@@ -193,9 +193,6 @@ export component BrowseView inherits Rectangle {
                                     height: Browse.folders.length * 50px;
                                     vertical-scrollbar-policy: always-off;
                                     horizontal-scrollbar-policy: always-off;
-                                    // A row click opens the folder, so it answers the way a
-                                    // card does; all grid scrollers opt out of drag-to-pan.
-                                    mouse-drag-pan-enabled: false;
 
                                     for folder in Browse.folders : BrowseFolderRowItem {
                                         name: folder.name;

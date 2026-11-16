@@ -12,6 +12,7 @@ import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
 import "assets/fonts/NotoSansSC-VF.ttf";
 
 import { Theme } from "theme.slint";
+import { InputMode } from "globals/input-mode.slint";
 import { CloudAccount, Settings } from "settings.slint";
 import { Albums, AlbumDetail } from "globals/albums.slint";
 import { Artists, ArtistDetail } from "globals/artists.slint";
@@ -80,6 +81,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
+    InputMode,
     ArtistChoice, ArtistPicker,
     CloudTrackActions,
     CloudEntityDetail,
