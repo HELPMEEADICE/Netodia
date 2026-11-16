@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Nine reasons to subscribe:
+//! Ten reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
@@ -29,6 +29,8 @@
 //! 9. **`Resized`**, **`CursorMoved`**, **`CursorEntered`** and **`MouseInput`** together, for
 //!    where a resize begins and where it is let go, which no one event reports. See
 //!    `resize_release`.
+//! 10. **`Touch`** — selects finger panning before dispatch and hands chrome presses to the OS
+//!     without leaking a Slint grab (`touch_input`).
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -45,8 +47,8 @@ use slint::{ComponentHandle, SharedString};
 use netodia_app::state::AppState;
 use netodia_core::error::describe;
 use netodia_ui::{
-    AppWindow, CompositeScroll, DragRegion, InputMode, PlaylistDetail, PopupHighlight, Queue,
-    Theme, WindowChrome,
+    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
+    WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
@@ -54,6 +56,8 @@ use super::drag_region::{DoublePress, PressAction};
 use super::parked_loop;
 use super::resize_release::ResizeWatch;
 use super::{drop_coalescer, geometry};
+
+mod touch_input;
 
 /// How long to wait after a focus loss before asking whether it was a minimize.
 ///
@@ -151,32 +155,16 @@ pub(super) struct PressTargets {
 }
 
 pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) {
+    let mut touch_input = touch_input::TouchInput::new(&targets);
     let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
     // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
     let mut double_press = DoublePress::default();
-    let mut chrome_touch = None;
     let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
-        // Before Slint sees the press: its styled scrollers otherwise reject finger panning too.
-        if let Some(ui) = weak.upgrade() {
-            match event {
-                WindowEvent::Touch(touch) => {
-                    ui.global::<InputMode>().set_touch_active(true);
-                    if matches!(touch.phase, TouchPhase::Started | TouchPhase::Cancelled) {
-                        ui.global::<InputMode>().set_control_pressed(false);
-                    }
-                }
-                WindowEvent::MouseInput { state: ElementState::Pressed, .. }
-                | WindowEvent::MouseWheel { .. } => {
-                    ui.global::<InputMode>().set_touch_active(false);
-                    ui.global::<InputMode>().set_control_pressed(false);
-                }
-                _ => {}
-            }
-        }
+        touch_input::update_mode(&weak, event);
         match event {
             WindowEvent::Resized(size) => resize_watch.resized(w, *size),
             WindowEvent::CursorMoved { .. }
@@ -219,44 +207,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 release_popup_highlight(&weak);
                 EventResult::Propagate
             }
-            WindowEvent::Touch(touch) => {
-                let contact = (touch.device_id, touch.id);
-                if touch.phase == TouchPhase::Started {
-                    chrome_touch = None;
-                    let p = touch.location.to_logical::<f32>(f64::from(w.scale_factor()));
-                    let position = slint::LogicalPosition::new(p.x, p.y);
-                    // Fingers have no preceding hover. Hit-test this position before consulting
-                    // the chrome cells, which still describe the last mouse position otherwise.
-                    if let Err(e) = w
-                        .try_dispatch_event(slint::platform::WindowEvent::PointerMoved { position })
-                    {
-                        log::warn!("touch hover: dispatch: {}", describe(&e));
-                    } else if let Some(direction) = resize.get() {
-                        chrome_touch = Some(contact);
-                        start_os_drag(w, "touch resize", |ww| ww.drag_resize_window(direction));
-                        return EventResult::PreventDefault;
-                    } else if drag_region.get() != DragRegion::None {
-                        chrome_touch = Some(contact);
-                        return drag_press(
-                            w,
-                            &weak,
-                            &mut double_press,
-                            drag_region.get(),
-                            position,
-                        );
-                    }
-                }
-                if chrome_touch == Some(contact) {
-                    if matches!(touch.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
-                        chrome_touch = None;
-                    }
-                    return EventResult::PreventDefault;
-                }
-                if matches!(touch.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
-                    release_popup_highlight(&weak);
-                }
-                EventResult::Propagate
-            }
+            WindowEvent::Touch(touch) => touch_input.handle(w, &weak, touch, &mut double_press),
             WindowEvent::Resized(_) => on_resized(w, &weak),
             // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
             // own position: position restore is a no-op there anyway, but a drag pressed again
