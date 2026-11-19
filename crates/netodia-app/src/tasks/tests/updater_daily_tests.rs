@@ -11,14 +11,14 @@ fn needs_check_returns_true_when_never_checked() {
 
 #[test]
 fn needs_check_returns_true_after_24h() {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     assert!(needs_check(now - ONE_DAY_SECS));
     assert!(needs_check(now - (ONE_DAY_SECS + 1)));
 }
 
 #[test]
 fn needs_check_returns_false_inside_24h() {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     // 1 minute ago.
     assert!(!needs_check(now - 60));
     // 23h59m ago.
@@ -32,7 +32,7 @@ fn needs_check_returns_false_for_future_timestamp() {
     // against `ONE_DAY_SECS` and so returns false — we skip the
     // check rather than re-firing, which is the safe behavior
     // (a check from "the future" suggests an unreliable clock).
-    let future = Utc::now().timestamp() + 3600;
+    let future = Timestamp::now().as_second() + 3600;
     assert!(!needs_check(future));
 }
 
