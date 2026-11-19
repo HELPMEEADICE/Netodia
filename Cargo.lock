@@ -3339,8 +3339,10 @@ dependencies = [
  "jiff-core",
  "jiff-static",
  "jiff-tzdb-platform",
+ "log",
  "portable-atomic",
  "portable-atomic-util",
+ "serde_core",
  "windows-link 0.2.1",
 ]
 
@@ -3349,6 +3351,9 @@ name = "jiff-core"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6b46a105a9874634dd96231021526bf24ca04955a5998c59a9c7666e634b7b8"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "jiff-static"
