@@ -26,7 +26,7 @@ dirs.workspace = true
 # `utils::atomic_file`'s temp-then-rename pair.
 tempfile.workspace = true
 # `utils::now_rfc`, the timestamp every ingest row and JSON state file is stamped with.
-chrono.workspace = true
+jiff.workspace = true
 log.workspace = true
 # `utils::fold`'s NFD pass, shared by the row filters and the lyrics directory's matcher.
 unicode-normalization.workspace = true

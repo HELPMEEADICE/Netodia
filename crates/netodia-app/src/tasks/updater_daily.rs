@@ -29,7 +29,7 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use tokio::sync::watch;
 
 use crate::services::settings;
@@ -181,7 +181,7 @@ fn needs_check(last_check_unix: i64) -> bool {
 }
 
 fn elapsed_secs(last_check_unix: i64) -> i64 {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     now.saturating_sub(last_check_unix)
 }
 

@@ -168,7 +168,7 @@ pub async fn get_tracks_in_directory(
 /// The N most-recently-played tracks (list-view projection), newest first.
 ///
 /// Ordering rides on `last_played` (RFC-3339 UTC, written by the play-count flusher /
-/// `update_play_count`), whose lexical order is chronological even though `chrono`'s `AutoSi`
+/// `update_play_count`), whose lexical order is chronological even though the RFC 3339 formatter
 /// fractional seconds vary in width: the offset's `'+'` sorts below every digit, and `AutoSi` only
 /// drops trailing-zero groups. Rows without a `last_played` (never played) are excluded —
 /// index-backed by the partial `idx_tracks_last_played`.

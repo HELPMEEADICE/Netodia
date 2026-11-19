@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use async_compat::Compat;
-use chrono::Local;
+use jiff::ZonedDateTime;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use super::{refresh_export_selection_meta, set_all_picks, toggle_pick};
@@ -166,7 +166,9 @@ impl Selection {
                 .set_file_name(playlist_files::suggested_file_name(name))
                 .add_filter("Playlists", &playlist_files::PLAYLIST_EXTENSIONS),
             Self::Many(_) => file_dialog::parented(weak, "Export Playlists")
-                .set_file_name(playlist_files::suggested_archive_name(Local::now()))
+                .set_file_name(playlist_files::suggested_archive_name(
+                    ZonedDateTime::now().datetime(),
+                ))
                 .add_filter("Playlist archives", &[playlist_files::ARCHIVE_EXTENSION]),
         };
         dialog.save_file().await.map(|target| target.path().to_path_buf())

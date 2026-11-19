@@ -8,6 +8,7 @@
 //! bound" guarantee the rest of the query layer gets from `AssertSqlSafe(sql) +
 //! .bind()`. No user string can reach the SQL text.
 
+use jiff::{SignedDuration, Timestamp, tz::Offset};
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
@@ -18,6 +19,7 @@ use netodia_core::entities::smart_criteria::{
 };
 use netodia_core::entities::track;
 use netodia_core::error::AppError;
+use netodia_core::utils::format_rfc3339;
 
 /// Resolve a smart playlist's current membership as list-view rows, in the
 /// criteria's order (and capped by its optional limit).
@@ -471,17 +473,16 @@ fn escape_like(s: &str) -> String {
     out
 }
 
-/// Upper bound on a relative-date rule's day count (~9,863 years). Clamps a
-/// hostile/absurd value so `TimeDelta::try_days` can't overflow.
+/// Upper bound on a relative-date rule's day count (~9,863 years).
 const MAX_RELATIVE_DAYS: i64 = 3_600_000;
 
 /// The RFC-3339 cutoff `now - days` for the relative-date operators. `days` is
-/// clamped to [`MAX_RELATIVE_DAYS`] so a hostile/absurd value can't overflow
-/// `TimeDelta`; the `unwrap_or` fallback is dead after the clamp.
+/// clamped to [`MAX_RELATIVE_DAYS`] before converting it to seconds.
 fn cutoff_rfc3339(days: i64) -> String {
     let days = days.clamp(0, MAX_RELATIVE_DAYS);
-    let delta = chrono::TimeDelta::try_days(days).unwrap_or_else(chrono::TimeDelta::zero);
-    (chrono::Utc::now() - delta).to_rfc3339()
+    let delta = SignedDuration::from_secs(days * 86_400);
+    let cutoff = Timestamp::now().checked_sub(delta).unwrap_or(Timestamp::MIN);
+    format_rfc3339(cutoff, Offset::UTC)
 }
 
 #[cfg(test)]

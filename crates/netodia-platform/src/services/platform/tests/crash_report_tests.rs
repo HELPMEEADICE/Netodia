@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use chrono::{Local, TimeZone};
+use jiff::{SignedDuration, ZonedDateTime, civil::datetime, tz::Offset};
 
 use super::{
     LAST_SEEN_FILE, MAX_CRASH_REPORTS, file_name, format_report, prune, recent, take_unseen,
@@ -21,11 +21,12 @@ fn entry_names(dir: &Path) -> Result<Vec<String>, AppError> {
     Ok(names)
 }
 
-/// A local timestamp `n` seconds past an arbitrary fixed instant, so the tests
-/// order reports without depending on the wall clock.
-fn stamp(offset_secs: i64) -> chrono::DateTime<Local> {
-    let base = Local.with_ymd_and_hms(2026, 8, 6, 14, 30, 0).single().unwrap_or_else(Local::now);
-    base + chrono::TimeDelta::seconds(offset_secs)
+/// A timestamp `n` seconds past an arbitrary fixed instant, so the tests need no wall clock.
+fn stamp(offset_secs: i64) -> ZonedDateTime {
+    let base = datetime(2026, 8, 6, 14, 30, 0, 0)
+        .to_zoned_datetime(Offset::UTC.to_time_zone())
+        .unwrap_or(ZonedDateTime::UNIX_EPOCH);
+    base + SignedDuration::from_secs(offset_secs)
 }
 
 /// The report is what a reporter attaches, so every field earning a line in the
@@ -38,7 +39,7 @@ fn stamp(offset_secs: i64) -> chrono::DateTime<Local> {
 fn a_report_carries_every_field() {
     let report = reading_env(|| {
         format_report(
-            stamp(0),
+            &stamp(0),
             Some("netodia-bg"),
             Some("src/ui/foo.rs:123"),
             "assertion failed",
@@ -65,7 +66,7 @@ fn a_report_carries_every_field() {
 /// payload that isn't a string. None of those may cost the report its shape.
 #[test]
 fn a_report_survives_missing_fields() {
-    let report = reading_env(|| format_report(stamp(0), None, None, "boom", ""));
+    let report = reading_env(|| format_report(&stamp(0), None, None, "boom", ""));
     assert!(report.contains("<unnamed>"));
     assert!(report.contains("<unknown>"));
     assert!(report.contains("boom"));
@@ -80,7 +81,7 @@ fn a_report_redacts_the_home_directory() {
     };
     reading_env(|| {
         let report = format_report(
-            stamp(0),
+            &stamp(0),
             Some("main"),
             Some("src/lib.rs:1"),
             &format!("failed to open {home}/Music/x.flac"),
@@ -97,9 +98,9 @@ fn a_report_redacts_the_home_directory() {
 /// gated on the latter, so a drift between them silently disarms the sweep.
 #[test]
 fn a_name_round_trips_through_its_inverse() {
-    let now = stamp(0);
+    let now = stamp(0).datetime();
     let parsed = timestamp_of(&file_name(now));
-    assert_eq!(parsed, Some(now.naive_local()));
+    assert_eq!(parsed, Some(now));
 }
 
 /// Written out of order on purpose: a prune that trusted `read_dir` order rather
@@ -109,7 +110,7 @@ fn prune_keeps_the_newest_and_deletes_the_rest() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let offsets: Vec<i64> = (0..i64::try_from(MAX_CRASH_REPORTS).unwrap_or(10) + 3).collect();
     for offset in offsets.iter().rev() {
-        std::fs::write(tmp.path().join(file_name(stamp(*offset))), b"x")?;
+        std::fs::write(tmp.path().join(file_name(stamp(*offset).datetime())), b"x")?;
     }
 
     prune(tmp.path());
@@ -118,7 +119,7 @@ fn prune_keeps_the_newest_and_deletes_the_rest() -> Result<(), AppError> {
     assert_eq!(kept.len(), MAX_CRASH_REPORTS);
     // The three oldest are the ones that go.
     for offset in &offsets[..3] {
-        assert!(!kept.contains(&file_name(stamp(*offset))), "prune kept an old report");
+        assert!(!kept.contains(&file_name(stamp(*offset).datetime())), "prune kept an old report");
     }
     Ok(())
 }
@@ -144,7 +145,7 @@ fn prune_never_touches_a_name_it_did_not_write() -> Result<(), AppError> {
         std::fs::write(tmp.path().join(name), b"x")?;
     }
     for offset in 0..i64::try_from(MAX_CRASH_REPORTS).unwrap_or(10) + 5 {
-        std::fs::write(tmp.path().join(file_name(stamp(offset))), b"x")?;
+        std::fs::write(tmp.path().join(file_name(stamp(offset).datetime())), b"x")?;
     }
 
     prune(tmp.path());
@@ -161,14 +162,14 @@ fn prune_never_touches_a_name_it_did_not_write() -> Result<(), AppError> {
 fn recent_returns_the_newest_first() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     for offset in 0..5 {
-        std::fs::write(tmp.path().join(file_name(stamp(offset))), b"x")?;
+        std::fs::write(tmp.path().join(file_name(stamp(offset).datetime())), b"x")?;
     }
 
     let newest = recent(tmp.path(), 2);
 
     let names: Vec<String> =
         newest.iter().filter_map(|p| p.file_name()?.to_str().map(str::to_owned)).collect();
-    assert_eq!(names, [file_name(stamp(4)), file_name(stamp(3))]);
+    assert_eq!(names, [file_name(stamp(4).datetime()), file_name(stamp(3).datetime())]);
     Ok(())
 }
 
@@ -191,13 +192,13 @@ fn an_empty_folder_yields_nothing() -> Result<(), AppError> {
 fn take_unseen_hands_a_report_over_exactly_once() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     for offset in 0..3 {
-        std::fs::write(tmp.path().join(file_name(stamp(offset))), b"x")?;
+        std::fs::write(tmp.path().join(file_name(stamp(offset).datetime())), b"x")?;
     }
 
     let first = take_unseen(tmp.path());
     assert_eq!(
         first.as_ref().and_then(|p| p.file_name()?.to_str()),
-        Some(file_name(stamp(2)).as_str()),
+        Some(file_name(stamp(2).datetime()).as_str()),
         "the newest report is the one worth announcing"
     );
     assert_eq!(take_unseen(tmp.path()), None);
@@ -210,14 +211,14 @@ fn take_unseen_hands_a_report_over_exactly_once() -> Result<(), AppError> {
 #[test]
 fn take_unseen_announces_a_crash_newer_than_the_marker() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+    std::fs::write(tmp.path().join(file_name(stamp(0).datetime())), b"x")?;
     assert!(take_unseen(tmp.path()).is_some());
 
-    std::fs::write(tmp.path().join(file_name(stamp(60))), b"x")?;
+    std::fs::write(tmp.path().join(file_name(stamp(60).datetime())), b"x")?;
 
     assert_eq!(
         take_unseen(tmp.path()).as_ref().and_then(|p| p.file_name()?.to_str()),
-        Some(file_name(stamp(60)).as_str())
+        Some(file_name(stamp(60).datetime()).as_str())
     );
     Ok(())
 }
@@ -228,12 +229,12 @@ fn take_unseen_announces_a_crash_newer_than_the_marker() -> Result<(), AppError>
 #[test]
 fn take_unseen_stays_quiet_for_a_report_the_marker_covers() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    let newest = tmp.path().join(file_name(stamp(60)));
+    let newest = tmp.path().join(file_name(stamp(60).datetime()));
     std::fs::write(&newest, b"x")?;
     assert!(take_unseen(tmp.path()).is_some());
 
     std::fs::remove_file(&newest)?;
-    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+    std::fs::write(tmp.path().join(file_name(stamp(0).datetime())), b"x")?;
 
     assert_eq!(take_unseen(tmp.path()), None);
     Ok(())
@@ -244,7 +245,7 @@ fn take_unseen_stays_quiet_for_a_report_the_marker_covers() -> Result<(), AppErr
 #[test]
 fn the_marker_is_not_itself_a_report() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+    std::fs::write(tmp.path().join(file_name(stamp(0).datetime())), b"x")?;
     assert!(take_unseen(tmp.path()).is_some());
 
     assert!(tmp.path().join(LAST_SEEN_FILE).exists(), "no marker was written");

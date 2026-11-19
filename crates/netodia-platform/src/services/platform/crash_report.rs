@@ -25,9 +25,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chrono::{DateTime, Local, NaiveDateTime};
+use jiff::{ZonedDateTime, civil::DateTime};
 
 use netodia_core::error::describe;
+use netodia_core::utils::format_rfc3339;
 use netodia_core::utils::redact::redact_home;
 
 /// How many reports survive a [`prune`].
@@ -83,21 +84,21 @@ impl Drop for HookGuard {
 }
 
 /// The one definition of the naming scheme; [`timestamp_of`] is its inverse.
-fn file_name(now: DateTime<Local>) -> String {
-    format!("{PREFIX}{}{SUFFIX}", now.format(FILE_TS_FORMAT))
+fn file_name(now: DateTime) -> String {
+    format!("{PREFIX}{}{SUFFIX}", now.strftime(FILE_TS_FORMAT))
 }
 
 /// When a report was written, or `None` for a name this module did not write.
 /// Pruning is gated on this, so it is the whole of what keeps the sweep off a
 /// file that isn't ours — `netodia_rCURRENT.log` shares the directory.
-fn timestamp_of(name: &str) -> Option<NaiveDateTime> {
+fn timestamp_of(name: &str) -> Option<DateTime> {
     parse_stamp(name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?)
 }
 
 /// Read a bare [`FILE_TS_FORMAT`] stamp — the half [`timestamp_of`] and the
 /// last-seen marker share.
-fn parse_stamp(stamp: &str) -> Option<NaiveDateTime> {
-    NaiveDateTime::parse_from_str(stamp, FILE_TS_FORMAT).ok()
+fn parse_stamp(stamp: &str) -> Option<DateTime> {
+    DateTime::strptime(FILE_TS_FORMAT, stamp).ok()
 }
 
 /// Install the panic hook. Call once, as early as a logs directory exists, so
@@ -117,17 +118,17 @@ pub fn install_hook(logs_dir: &Path) {
         }
         let _guard = HookGuard;
 
-        let now = Local::now();
+        let now = ZonedDateTime::now();
         let thread = std::thread::current();
         let location = info.location().map(ToString::to_string);
         let payload = info.payload_as_str().unwrap_or("<non-string panic payload>");
         let backtrace = std::backtrace::Backtrace::force_capture().to_string();
 
-        let report = format_report(now, thread.name(), location.as_deref(), payload, &backtrace);
+        let report = format_report(&now, thread.name(), location.as_deref(), payload, &backtrace);
 
         // Plain `fs`, deliberately: a panic raised inside a logging call must
         // not have to go back through the logger to leave an artifact.
-        let path = logs_dir.join(file_name(now));
+        let path = logs_dir.join(file_name(now.datetime()));
         let _ = std::fs::create_dir_all(&logs_dir);
         let _ = std::fs::write(&path, report);
         prune(&logs_dir);
@@ -146,7 +147,7 @@ pub fn install_hook(logs_dir: &Path) {
 
 /// Render a report. Pure over its inputs so it is testable without panicking.
 fn format_report(
-    now: DateTime<Local>,
+    now: &ZonedDateTime,
     thread: Option<&str>,
     location: Option<&str>,
     payload: &str,
@@ -170,7 +171,7 @@ fn format_report(
 }
 
 /// The header both this report and the diagnostics bundle open with.
-pub fn system_facts(now: DateTime<Local>) -> String {
+pub fn system_facts(now: &ZonedDateTime) -> String {
     // Absent off Linux, where the pair says nothing worth a line.
     let session_type = std::env::var("XDG_SESSION_TYPE").ok();
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
@@ -191,7 +192,7 @@ pub fn system_facts(now: DateTime<Local>) -> String {
          {session}\
          install   : {install}\n",
         version = env!("CARGO_PKG_VERSION"),
-        timestamp = now.to_rfc3339(),
+        timestamp = format_rfc3339(now.timestamp(), now.offset()),
         os = std::env::consts::OS,
         arch = std::env::consts::ARCH,
         // `None` on macOS and unsupported arches — the install method is
@@ -217,7 +218,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let record = LastSeen { newest: Some(newest.format(FILE_TS_FORMAT).to_string()) };
+    let record = LastSeen { newest: Some(newest.strftime(FILE_TS_FORMAT).to_string()) };
     if let Err(e) = netodia_core::utils::atomic_file::write_json_sync(&marker, &record) {
         // Hand the report over anyway. The hook wrote into this same directory
         // moments before, so a failure here is close to impossible — and a
@@ -227,8 +228,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     Some(path)
 }
 
-/// What [`take_unseen`] persists. A [`FILE_TS_FORMAT`] string rather than a
-/// `NaiveDateTime` because chrono is pulled without its `serde` feature.
+/// What [`take_unseen`] persists, using the same [`FILE_TS_FORMAT`] as report names.
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 struct LastSeen {
     #[serde(default)]
@@ -246,12 +246,12 @@ pub fn recent(logs_dir: &Path, limit: usize) -> Vec<PathBuf> {
 /// Every report in `logs_dir` that parses back into this module's scheme,
 /// oldest first. Anything else in the directory — a log file, something the
 /// user put there — is not collected and so can't be swept.
-fn existing_reports(logs_dir: &Path) -> Vec<(NaiveDateTime, PathBuf)> {
+fn existing_reports(logs_dir: &Path) -> Vec<(DateTime, PathBuf)> {
     let Ok(entries) = std::fs::read_dir(logs_dir) else {
         return Vec::new();
     };
 
-    let mut reports: Vec<(NaiveDateTime, PathBuf)> = entries
+    let mut reports: Vec<(DateTime, PathBuf)> = entries
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();

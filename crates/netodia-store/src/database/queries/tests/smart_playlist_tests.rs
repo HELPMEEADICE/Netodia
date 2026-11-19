@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use jiff::{SignedDuration, Timestamp, tz::Offset};
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
@@ -15,11 +16,12 @@ use netodia_core::entities::smart_criteria::{
 };
 use netodia_core::entities::track::TrackListRow;
 use netodia_core::error::AppError;
+use netodia_core::utils::format_rfc3339;
 
 /// RFC-3339 timestamp `n` days before now — for staging `last_played`.
 fn days_ago(n: i64) -> String {
-    let delta = chrono::TimeDelta::try_days(n).unwrap_or_else(chrono::TimeDelta::zero);
-    (chrono::Utc::now() - delta).to_rfc3339()
+    let stamp = Timestamp::now() - SignedDuration::from_secs(n * 86_400);
+    format_rfc3339(stamp, Offset::UTC)
 }
 
 /// Stage playback stats the scan-insert helper leaves at defaults.

@@ -18,7 +18,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::{DateTime, Local};
+use jiff::{ZonedDateTime, civil::DateTime};
 
 use crate::services::settings::read_settings;
 use crate::state::AppState;
@@ -46,8 +46,8 @@ const MAX_LOG_TAIL_BYTES: u64 = 256 * 1024;
 /// What to pre-fill the save dialog with. Stamped local, like a crash report's
 /// name and for the same reason — a reporter matching a file against "it broke
 /// around 2pm" shouldn't have to apply an offset.
-pub fn suggested_file_name(now: DateTime<Local>) -> String {
-    format!("netodia-diagnostics-{}.txt", now.format(FILE_TS_FORMAT))
+pub fn suggested_file_name(now: DateTime) -> String {
+    format!("netodia-diagnostics-{}.txt", now.strftime(FILE_TS_FORMAT))
 }
 
 /// Build the report. Returns the text; the caller owns where it lands.
@@ -102,7 +102,7 @@ fn assemble(paths: &Paths, library: &LibraryFacts) -> String {
          {facts}\
          data dir  : {data_dir}\n\
          {library}{settings}{crashes}{logs}",
-        facts = crash_report::system_facts(Local::now()),
+        facts = crash_report::system_facts(&ZonedDateTime::now()),
         // Its own line rather than left to the boot log below: that budget is spent from the
         // tail, so the line naming the root drops out of exactly the long session worth
         // reporting. Not in `system_facts`, which a crash report shares and which has no `Paths`.

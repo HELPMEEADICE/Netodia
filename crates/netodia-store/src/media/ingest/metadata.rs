@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
+use jiff::{Timestamp, tz::Offset};
 use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
@@ -14,6 +15,7 @@ use netodia_core::entities::artist::ArtistCredit;
 use netodia_core::entities::genre::GenreList;
 use netodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use netodia_core::error::AppError;
+use netodia_core::utils::format_rfc3339;
 
 /// Compute a full BLAKE3 hash of a file (64-char hex string).
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
@@ -37,13 +39,9 @@ pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
 /// so the formats can't drift apart. Takes `&Metadata` so a caller that
 /// already `stat`-ed the file doesn't pay for a second syscall.
 pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
-    meta.modified()
-        .ok()
-        .and_then(|mtime| mtime.duration_since(UNIX_EPOCH).ok())
-        .and_then(|dur| {
-            chrono::DateTime::from_timestamp(i64::try_from(dur.as_secs()).ok()?, dur.subsec_nanos())
-        })
-        .map(|dt| dt.to_rfc3339())
+    let mtime = meta.modified().ok()?;
+    mtime.duration_since(UNIX_EPOCH).ok()?;
+    Timestamp::try_from(mtime).ok().map(|stamp| format_rfc3339(stamp, Offset::UTC))
 }
 
 /// Extract the file's modification time as an RFC 3339 string.

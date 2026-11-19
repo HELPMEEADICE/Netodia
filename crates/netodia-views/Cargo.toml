@@ -40,7 +40,7 @@ rand.workspace = true
 image.workspace = true
 lru.workspace = true
 material-colors.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 log.workspace = true
 # Reached only through `ui::file_dialog::parented`, which is the sole place it may be named.
 rfd.workspace = true

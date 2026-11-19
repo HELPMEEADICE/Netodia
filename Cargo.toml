@@ -217,7 +217,7 @@ qrcode = { version = "0.14.1", default-features = false }
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+jiff = "1.0.1"
 dirs = "6.0.0"
 
 # Logging / errors
@@ -225,7 +225,7 @@ log = "0.4.33"
 # Replaced `env_logger` when logs had to reach a file: the only candidate with size
 # and age rotation in one criterion and no background thread. `colors` pulls
 # `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
-flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
+flexi_logger = { version = "0.32.0", default-features = false, features = ["colors"] }
 thiserror = "2.0.19"
 
 # Updater
@@ -252,9 +252,8 @@ tempfile = "3.27.0"
 # archive zipped elsewhere reliably uses; the defaults add AES, bzip2, lzma, xz, zstd,
 # PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names no
 # backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
-# that lost that would fail to compile rather than misbehave. `chrono` is the conversion
-# that dates each entry, without which every extracted file reads 1980; it adds no crate.
-zip = { version = "9.0.4", default-features = false, features = ["chrono", "deflate-flate2"] }
+# that lost that would fail to compile rather than misbehave.
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 # Test-only: the translations pin reads the bundled faces' character maps. Slint's compiler

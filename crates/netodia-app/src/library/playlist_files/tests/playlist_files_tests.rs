@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use chrono::TimeZone;
+use jiff::civil::datetime;
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
@@ -193,8 +193,8 @@ fn a_suggested_file_name_has_no_folder_for_a_save_dialog_to_read_into() {
 
 #[test]
 fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() {
-    let named = Local.with_ymd_and_hms(2026, 3, 7, 12, 0, 0).single().map(suggested_archive_name);
-    assert_eq!(named.as_deref(), Some("netodia-playlists-2026-03-07.zip"));
+    let named = suggested_archive_name(datetime(2026, 3, 7, 12, 0, 0, 0));
+    assert_eq!(named, "netodia-playlists-2026-03-07.zip");
 }
 
 #[test]
@@ -272,8 +272,7 @@ async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppEr
     let playlist_id = playlist_with_tracks(&db, "Rock/Roll: Best?", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result =
-        written(write_archive(&db, &[playlist_id], &out, NaiveDateTime::default()).await?)?;
+    let result = written(write_archive(&db, &[playlist_id], &out, DateTime::default()).await?)?;
 
     assert_eq!(result.exported, 1);
     assert_eq!(result.failed, 0);
@@ -299,8 +298,7 @@ async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), Ap
     let second = playlist_with_tracks(&db, "A:B", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result =
-        written(write_archive(&db, &[first, second], &out, NaiveDateTime::default()).await?)?;
+    let result = written(write_archive(&db, &[first, second], &out, DateTime::default()).await?)?;
 
     assert_eq!(result.exported, 2);
     assert_eq!(names(&archived(&out)?), ["A_B.m3u8", "A_B (2).m3u8"]);
@@ -318,7 +316,7 @@ async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
 
     let out = tmp.path().join("exported.zip");
     let result =
-        written(write_archive(&db, &[playlist_id, 9_999], &out, NaiveDateTime::default()).await?)?;
+        written(write_archive(&db, &[playlist_id, 9_999], &out, DateTime::default()).await?)?;
 
     assert_eq!(result.exported, 1, "the readable playlist still writes");
     assert_eq!(result.failed, 1);
@@ -453,7 +451,7 @@ fn archive_at(path: &Path, entries: &[(&str, &str)]) -> Result<(), AppError> {
         .iter()
         .map(|&(name, text)| archive::Entry { name: name.to_owned(), text: text.to_owned() })
         .collect();
-    archive::write(std::fs::File::create(path)?, &entries, NaiveDateTime::default())
+    archive::write(std::fs::File::create(path)?, &entries, DateTime::default())
 }
 
 /// A playlist file's text holding one entry, `line` being the path as the file spells it.
@@ -480,7 +478,7 @@ async fn an_exported_archive_imports_back_as_the_same_playlists() -> Result<(), 
     let road = playlist_with_tracks(&db, "Road", &ids).await?;
     let short = playlist_with_tracks(&db, "Short", &[ids[2], ids[0]]).await?;
     let out = tmp.path().join("backup.zip");
-    written(write_archive(&db, &[road, short], &out, NaiveDateTime::default()).await?)?;
+    written(write_archive(&db, &[road, short], &out, DateTime::default()).await?)?;
 
     let result = import_playlists_from_file(&db, &out).await?;
 
@@ -502,7 +500,7 @@ async fn an_archive_export_with_nothing_readable_writes_no_file() -> Result<(), 
     let (db, _) = seed_under(tmp.path()).await?;
     let out = tmp.path().join("backup.zip");
 
-    let result = written(write_archive(&db, &[9_999], &out, NaiveDateTime::default()).await?)?;
+    let result = written(write_archive(&db, &[9_999], &out, DateTime::default()).await?)?;
 
     assert_eq!((result.exported, result.failed), (0, 1));
     assert!(!out.exists(), "an archive with nothing in it would import back as a refusal");
@@ -529,7 +527,7 @@ async fn playlists_too_large_to_import_back_write_nothing_and_leave_the_old_file
     let out = tmp.path().join("backup.zip");
     std::fs::write(&out, "an earlier backup")?;
 
-    let export = write_archive(&db, &[playlist; COPIES], &out, NaiveDateTime::default()).await?;
+    let export = write_archive(&db, &[playlist; COPIES], &out, DateTime::default()).await?;
 
     assert!(matches!(export, ExportOutcome::TooLarge));
     assert_eq!(std::fs::read_to_string(&out)?, "an earlier backup");
@@ -649,7 +647,7 @@ async fn an_archive_extension_is_recognised_in_any_case() -> Result<(), AppError
     let (db, ids) = seed_under(tmp.path()).await?;
     let road = playlist_with_tracks(&db, "Road", &ids).await?;
     let out = tmp.path().join("BACKUP.ZIP");
-    written(write_archive(&db, &[road], &out, NaiveDateTime::default()).await?)?;
+    written(write_archive(&db, &[road], &out, DateTime::default()).await?)?;
 
     let result = import_playlists_from_file(&db, &out).await?;
 

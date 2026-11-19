@@ -3,7 +3,7 @@
 //! Fetching, judging a skip, caching the asset and recording the result sit here so the two can't
 //! drift apart. What stays with each caller is its cadence and how loudly it fails.
 
-use chrono::Utc;
+use jiff::Timestamp;
 use tokio::sync::watch;
 
 use netodia_core::config::Paths;
@@ -93,7 +93,7 @@ pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> AppResult<Findi
         None => check_for_update(http, RELEASES_BASE, &current).await.map(Some),
     };
 
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     match fetched {
         Ok(Some(checked)) => Ok(settle(paths, &flags.skipped_release, checked, now)),
         Ok(None) => {

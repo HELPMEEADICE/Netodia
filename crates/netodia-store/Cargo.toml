@@ -28,7 +28,7 @@ notify-debouncer-full.workspace = true
 rayon.workspace = true
 blake3.workspace = true
 image.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 log.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]

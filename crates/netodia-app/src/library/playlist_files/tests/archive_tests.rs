@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use chrono::NaiveDate;
+use jiff::civil::datetime;
 
 use super::*;
 
@@ -31,7 +31,7 @@ fn entry(name: &str, text: &str) -> Entry {
     Entry { name: name.to_owned(), text: text.to_owned() }
 }
 
-fn written(entries: &[Entry], modified: NaiveDateTime) -> Result<Vec<u8>, AppError> {
+fn written(entries: &[Entry], modified: DateTime) -> Result<Vec<u8>, AppError> {
     let mut out = Cursor::new(Vec::new());
     write(&mut out, entries, modified)?;
     Ok(out.into_inner())
@@ -48,12 +48,6 @@ fn modified_of_first_entry(bytes: Vec<u8>) -> Result<Option<zip::DateTime>, AppE
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(AppError::io_source)?;
     let file = archive.by_index(0).map_err(AppError::io_source)?;
     Ok(file.last_modified())
-}
-
-fn at(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> NaiveDateTime {
-    NaiveDate::from_ymd_opt(year, month, day)
-        .and_then(|date| date.and_hms_opt(hour, minute, second))
-        .unwrap_or_default()
 }
 
 // --- TextBudget ---------------------------------------------------------------
@@ -98,7 +92,7 @@ fn a_spent_budget_still_fits_nothing_but_nothing() {
 fn an_archive_reads_back_the_entries_it_was_written_with_in_order() -> Result<(), AppError> {
     let bytes = written(
         &[entry("Road.m3u8", "#EXTM3U\n#PLAYLIST:Road\n"), entry("Mix.m3u8", "#EXTM3U\n")],
-        NaiveDateTime::default(),
+        DateTime::default(),
     )?;
 
     let (entries, unreadable) = read_back(bytes)?;
@@ -116,7 +110,7 @@ fn an_archive_reads_back_the_entries_it_was_written_with_in_order() -> Result<()
 
 #[test]
 fn an_archive_written_with_nothing_reads_as_no_entries() -> Result<(), AppError> {
-    let (entries, unreadable) = read_back(written(&[], NaiveDateTime::default())?)?;
+    let (entries, unreadable) = read_back(written(&[], DateTime::default())?)?;
     assert!(entries.is_empty());
     assert_eq!(unreadable, 0);
     Ok(())
@@ -124,7 +118,7 @@ fn an_archive_written_with_nothing_reads_as_no_entries() -> Result<(), AppError>
 
 #[test]
 fn a_date_the_format_cannot_hold_is_stored_as_its_epoch() -> Result<(), AppError> {
-    for modified in [at(1970, 1, 1, 0, 0, 0), at(2200, 6, 1, 12, 0, 0)] {
+    for modified in [datetime(1970, 1, 1, 0, 0, 0, 0), datetime(2200, 6, 1, 12, 0, 0, 0)] {
         let bytes = written(&[entry("a.m3u8", "#EXTM3U\n")], modified)?;
         assert_eq!(modified_of_first_entry(bytes)?, Some(zip::DateTime::default()), "{modified}");
     }
@@ -134,7 +128,7 @@ fn a_date_the_format_cannot_hold_is_stored_as_its_epoch() -> Result<(), AppError
 #[test]
 fn a_date_the_format_can_hold_is_stored_as_given() -> Result<(), AppError> {
     // An even second, the format keeping two-second steps.
-    let bytes = written(&[entry("a.m3u8", "#EXTM3U\n")], at(2026, 9, 14, 12, 34, 56))?;
+    let bytes = written(&[entry("a.m3u8", "#EXTM3U\n")], datetime(2026, 9, 14, 12, 34, 56, 0))?;
 
     let stored = modified_of_first_entry(bytes)?
         .map(|dt| (dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second()));

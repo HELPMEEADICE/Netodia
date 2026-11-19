@@ -54,4 +54,9 @@ ignore = [
     # it is not part of the shipped application. Slint 1.17.1 still uses the same spin_on version.
     # revisit: 2027-02-05
     "RUSTSEC-2026-0441",
+
+    # Slint's i-slint-core 1.16.1 requires chrono; the 1.19.0 release still does too.
+    # This notice flags maintenance status only. Remove when Slint drops chrono.
+    # revisit: 2027-02-19
+    "RUSTSEC-2026-0543",
 ]
