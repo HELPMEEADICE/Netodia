@@ -1,24 +1,24 @@
 //! Decoding ahead of the real-time audio callback into a bounded PCM queue.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, sync_channel};
 use std::thread;
 use std::time::Duration;
 
+use crossbeam_queue::ArrayQueue;
 use netodia_core::error::AppError;
 
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat};
 
 const PCM_BLOCK_SAMPLES: usize = 16 * 1024;
 const PCM_QUEUE_BLOCKS: usize = 24;
+// One block per queued item, plus one each for the callback and decoder. Leave a spare slot
+// so returning a block never waits for the decoder to finish releasing a slot it just popped.
+const RECYCLE_SLOTS: usize = PCM_QUEUE_BLOCKS + 3;
 // Four blocks give even 192 kHz stereo about 170 ms of decoded audio before playback starts.
 const LOCAL_PREFILL_BLOCKS: usize = 4;
 const SOURCE_POLL_INTERVAL: Duration = Duration::from_millis(2);
-
-const BUFFERING: u8 = 0;
-const PLAYING: u8 = 1;
-const ENDED: u8 = 2;
 
 /// State reported by the buffered decoder source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,11 +29,6 @@ pub enum BufferState {
     Playing,
     /// The decoder reached the end of its source.
     Ended,
-}
-
-struct Shared {
-    cancelled: Arc<AtomicBool>,
-    state: AtomicU8,
 }
 
 #[derive(Clone, Copy)]
@@ -52,8 +47,11 @@ struct Metadata {
 /// the bounded channel and asks that thread to stop.
 pub struct BufferedAudioSource {
     receiver: Receiver<Vec<Sample>>,
-    current: std::vec::IntoIter<Sample>,
-    shared: Arc<Shared>,
+    recycled: Arc<ArrayQueue<Vec<Sample>>>,
+    current: Vec<Sample>,
+    next_sample: usize,
+    cancelled: Arc<AtomicBool>,
+    state: BufferState,
     metadata: Metadata,
 }
 
@@ -90,18 +88,16 @@ impl BufferedAudioSource {
     {
         let (sender, receiver) = sync_channel(PCM_QUEUE_BLOCKS);
         let (ready_sender, ready_receiver) = sync_channel(1);
-        let shared = Arc::new(Shared {
-            cancelled: Arc::new(AtomicBool::new(false)),
-            state: AtomicU8::new(BUFFERING),
-        });
-        let worker_shared = Arc::clone(&shared);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let recycled = Arc::new(ArrayQueue::new(RECYCLE_SLOTS));
+        let worker_cancelled = Arc::clone(&cancelled);
+        let worker_recycled = Arc::clone(&recycled);
         thread::Builder::new()
             .name("netodia-decoder".to_owned())
             .spawn(move || {
-                let mut source = match factory(Arc::clone(&worker_shared.cancelled)) {
+                let mut source = match factory(Arc::clone(&worker_cancelled)) {
                     Ok(source) => source,
                     Err(error) => {
-                        worker_shared.state.store(ENDED, Ordering::Release);
                         let _ = ready_sender.send(Err(error));
                         return;
                     }
@@ -113,7 +109,7 @@ impl BufferedAudioSource {
                     total_duration: source.total_duration(),
                 };
                 for index in 0..prefill_blocks {
-                    let block = read_block(&mut source, &worker_shared.cancelled);
+                    let block = read_block(&mut source, &worker_cancelled, Vec::new());
                     if block.is_empty() {
                         // Publish EOF before letting the consumer pull a short file.
                         drop(sender);
@@ -133,8 +129,9 @@ impl BufferedAudioSource {
                     return;
                 }
 
-                while !worker_shared.cancelled.load(Ordering::Acquire) {
-                    let block = read_block(&mut source, &worker_shared.cancelled);
+                while !worker_cancelled.load(Ordering::Acquire) {
+                    let buffer = worker_recycled.pop().unwrap_or_default();
+                    let block = read_block(&mut source, &worker_cancelled, buffer);
                     if block.is_empty() || sender.send(block).is_err() {
                         break;
                     }
@@ -145,17 +142,21 @@ impl BufferedAudioSource {
         let metadata = ready_receiver.recv().map_err(|_| {
             AppError::Player("Audio decoder worker stopped before opening the source".to_owned())
         })??;
-        Ok(Self { receiver, current: Vec::new().into_iter(), shared, metadata })
+        Ok(Self {
+            receiver,
+            recycled,
+            current: Vec::new(),
+            next_sample: 0,
+            cancelled,
+            state: BufferState::Buffering,
+            metadata,
+        })
     }
 
     /// Current buffering state, suitable for transport status and UI publication.
     #[must_use]
     pub fn state(&self) -> BufferState {
-        match self.shared.state.load(Ordering::Acquire) {
-            PLAYING => BufferState::Playing,
-            ENDED => BufferState::Ended,
-            _ => BufferState::Buffering,
-        }
+        self.state
     }
 }
 
@@ -163,25 +164,32 @@ impl Iterator for BufferedAudioSource {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(sample) = self.current.next() {
-            self.shared.state.store(PLAYING, Ordering::Release);
+        if let Some(&sample) = self.current.get(self.next_sample) {
+            self.next_sample += 1;
             return Some(sample);
+        }
+
+        if !self.current.is_empty() {
+            self.current.clear();
+            // Return the allocation before receiving again and waking a blocked producer.
+            let _ = self.recycled.push(std::mem::take(&mut self.current));
         }
 
         match self.receiver.try_recv() {
             Ok(block) => {
-                self.current = block.into_iter();
-                self.shared.state.store(PLAYING, Ordering::Release);
-                self.current.next()
+                self.current = block;
+                self.next_sample = 1;
+                self.state = BufferState::Playing;
+                self.current.first().copied()
             }
             Err(TryRecvError::Empty) => {
-                self.shared.state.store(BUFFERING, Ordering::Release);
+                self.state = BufferState::Buffering;
                 None
             }
             // Disconnection is observed only after every queued block is drained. A separate
             // finished flag can race the producer's last send and discard that final block.
             Err(TryRecvError::Disconnected) => {
-                self.shared.state.store(ENDED, Ordering::Release);
+                self.state = BufferState::Ended;
                 None
             }
         }
@@ -218,7 +226,7 @@ impl AudioSource for BufferedAudioSource {
     }
 
     fn release_claims(&mut self) {
-        self.shared.cancelled.store(true, Ordering::Release);
+        self.cancelled.store(true, Ordering::Release);
     }
 
     fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
@@ -228,16 +236,20 @@ impl AudioSource for BufferedAudioSource {
 
 impl Drop for BufferedAudioSource {
     fn drop(&mut self) {
-        self.shared.cancelled.store(true, Ordering::Release);
+        self.cancelled.store(true, Ordering::Release);
     }
 }
 
-fn read_block<S: AudioSource>(source: &mut S, cancelled: &AtomicBool) -> Vec<Sample> {
+fn read_block<S: AudioSource>(
+    source: &mut S,
+    cancelled: &AtomicBool,
+    mut block: Vec<Sample>,
+) -> Vec<Sample> {
     // A dry queue can interrupt playback at a block boundary. Keep that boundary on a whole
     // frame so an underrun never loses a partial frame and shifts the remaining channels.
     let channels = usize::from(source.channels().get());
     let block_samples = (PCM_BLOCK_SAMPLES / channels).max(1) * channels;
-    let mut block = Vec::with_capacity(block_samples);
+    block.reserve_exact(block_samples);
     while block.len() < block_samples && !cancelled.load(Ordering::Acquire) {
         if let Some(sample) = source.next() {
             block.push(sample);
@@ -390,9 +402,13 @@ mod tests {
             release: Arc::new((Mutex::new(true), Condvar::new())),
         };
         let cancelled = AtomicBool::new(false);
-        let block = read_block(&mut source, &cancelled);
+        let mut block = read_block(&mut source, &cancelled, Vec::new());
         assert_eq!(block.len(), 16_383);
+        let allocation = block.as_ptr();
+        block.clear();
         // The two samples left before EOF do not make a playable frame.
-        assert!(read_block(&mut source, &cancelled).is_empty());
+        let tail = read_block(&mut source, &cancelled, block);
+        assert_eq!(tail, Vec::<Sample>::new());
+        assert_eq!(tail.as_ptr(), allocation);
     }
 }

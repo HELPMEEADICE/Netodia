@@ -4087,6 +4087,7 @@ dependencies = [
 name = "netodia-audio"
 version = "0.1.8"
 dependencies = [
+ "crossbeam-queue",
  "lofty",
  "log",
  "netodia-core",

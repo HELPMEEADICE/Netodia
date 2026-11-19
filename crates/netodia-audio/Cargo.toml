@@ -19,6 +19,7 @@ symphonia.workspace = true
 # The Opus decoder `player::source::opus` registers, which Symphonia has none of.
 opus-pure.workspace = true
 parking_lot.workspace = true
+crossbeam-queue = "0.3.12"
 # `SeekError`, the one error in this crate that is its own type rather than `AppError`.
 thiserror.workspace = true
 log.workspace = true

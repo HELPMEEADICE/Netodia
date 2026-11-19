@@ -137,8 +137,11 @@ fn remove_at_out_of_bounds() {
 fn remove_at_adjusts_current_when_before() {
     let mut q = make_queue(3);
     q.current_index = Some(2);
+    let removed = Arc::downgrade(&q.tracks[0]);
     q.remove_at(0);
     assert_eq!(q.current_index, Some(1));
+    assert_eq!(q.get_current().map(|track| track.id), Some(3));
+    assert!(removed.upgrade().is_none());
 }
 
 #[test]
@@ -179,9 +182,19 @@ fn remove_at_increments_version() {
 
 #[test]
 fn remove_batch_multiple() {
-    let mut q = make_queue(5);
-    q.remove_batch(&[1, 3]);
-    assert_eq!(q.play_order.len(), 3);
+    let mut q = make_queue(4);
+    q.add_tracks(vec![make_summary(1, "Duplicate", 180_000)]);
+    q.apply_shuffle_order(&[3, 0, 2, 1, 4]);
+    q.current_index = Some(3);
+    let removed = [Arc::downgrade(&q.tracks[0]), Arc::downgrade(&q.tracks[1])];
+
+    q.remove_batch(&[1, 3, 99]);
+
+    assert!(removed.iter().all(|track| track.upgrade().is_none()));
+    assert_eq!(q.to_persistable().track_ids, [4, 3, 1]);
+    assert_eq!(q.get_current().map(|track| track.title.as_str()), Some("Duplicate"));
+    q.unshuffle();
+    assert_eq!(q.to_persistable().track_ids, [3, 4, 1]);
 }
 
 #[test]

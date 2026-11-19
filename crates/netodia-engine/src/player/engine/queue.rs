@@ -106,9 +106,12 @@ impl QueueState {
 
         let removed_track_idx = self.play_order.remove(index);
 
-        // Remove from original_order
-        if let Some(pos) = self.original_order.iter().position(|&i| i == removed_track_idx) {
-            self.original_order.remove(pos);
+        self.tracks.remove(removed_track_idx);
+        self.original_order.retain(|&i| i != removed_track_idx);
+        for i in self.play_order.iter_mut().chain(&mut self.original_order) {
+            if *i > removed_track_idx {
+                *i -= 1;
+            }
         }
 
         // Adjust current_index
@@ -124,8 +127,6 @@ impl QueueState {
             }
         }
 
-        // Note: we don't remove from self.tracks to avoid invalidating all indices.
-        // Orphaned track data is cleaned up on queue clear.
         self.version += 1;
         true
     }
@@ -136,41 +137,9 @@ impl QueueState {
             return;
         }
 
-        let index_set: std::collections::HashSet<usize> = indices.iter().copied().collect();
-
-        // Collect the track indices being removed (for original_order cleanup).
-        let removed_track_indices: std::collections::HashSet<usize> =
-            index_set.iter().filter_map(|&i| self.play_order.get(i).copied()).collect();
-
-        // Determine whether the currently-playing slot is being removed and
-        // count how many removed indices fall before it.
-        let (current_removed, removed_before) = match self.current_index {
-            Some(ci) => (index_set.contains(&ci), index_set.iter().filter(|&&i| i < ci).count()),
-            None => (false, 0),
-        };
-
-        // Retain only non-removed entries in play_order and original_order.
-        let mut pos = 0usize;
-        self.play_order.retain(|_| {
-            let keep = !index_set.contains(&pos);
-            pos += 1;
-            keep
-        });
-        self.original_order.retain(|ti| !removed_track_indices.contains(ti));
-
-        // Adjust current_index.
-        if self.play_order.is_empty() {
-            self.current_index = None;
-        } else if let Some(ci) = self.current_index {
-            let mut next = ci.saturating_sub(removed_before);
-            if current_removed {
-                // Clamp to valid range after the track at current_index was removed.
-                next = next.min(self.play_order.len() - 1);
-            }
-            self.current_index = Some(next);
-        }
-
-        self.version += 1;
+        let removed: HashSet<usize> =
+            indices.iter().filter_map(|&i| self.play_order.get(i).copied()).collect();
+        self.remove_tracks(|index, _| removed.contains(&index));
     }
 
     pub fn move_track(&mut self, from: usize, to: usize) -> bool {
@@ -427,96 +396,66 @@ impl QueueState {
     /// Bumps `version` only when at least one entry actually changed, so a
     /// no-op call (empty input or no matches) won't trigger a `ViewModel` re-emit.
     pub fn prune_missing(&mut self, ids_to_remove: &HashSet<i64>) -> PruneOutcome {
-        self.prune_where(|track| ids_to_remove.contains(&track.id))
+        self.remove_tracks(|_, track| ids_to_remove.contains(&track.id))
     }
 
     /// Prune missing local-library rows without treating a cloud song with the same numeric ID as
     /// the same queue entry. Cloud and local IDs belong to separate namespaces.
     pub fn prune_missing_local(&mut self, ids_to_remove: &HashSet<i64>) -> PruneOutcome {
-        self.prune_where(|track| !track.file_path.is_empty() && ids_to_remove.contains(&track.id))
+        self.remove_tracks(|_, track| {
+            !track.file_path.is_empty() && ids_to_remove.contains(&track.id)
+        })
     }
 
-    fn prune_where(
+    fn remove_tracks(
         &mut self,
-        mut should_remove: impl FnMut(&TrackSummary) -> bool,
+        mut should_remove: impl FnMut(usize, &TrackSummary) -> bool,
     ) -> PruneOutcome {
-        if self.tracks.is_empty() {
-            return PruneOutcome::default();
-        }
-
-        // Step 1: classify each `tracks` slot and build the old→new remap.
         let old_len = self.tracks.len();
-        let mut keep_mask: Vec<bool> = Vec::with_capacity(old_len);
-        let mut remap: Vec<Option<usize>> = Vec::with_capacity(old_len);
-        let mut new_tracks: Vec<Arc<TrackSummary>> = Vec::with_capacity(old_len);
-        for t in &self.tracks {
-            if should_remove(t) {
-                keep_mask.push(false);
-                remap.push(None);
-            } else {
-                keep_mask.push(true);
-                remap.push(Some(new_tracks.len()));
-                new_tracks.push(Arc::clone(t));
-            }
-        }
-
-        let removed = old_len - new_tracks.len();
-
-        if removed == 0 {
+        let Some(first_removed) =
+            self.tracks.iter().enumerate().position(|(i, track)| should_remove(i, track))
+        else {
             return PruneOutcome::default();
-        }
+        };
 
-        // Step 2: figure out whether the "currently playing" entry is among
-        // the casualties — *before* mutating anything else, so `current_index`
-        // still resolves through the old `play_order`.
-        let current_was_removed = self
-            .current_index
-            .and_then(|ci| self.play_order.get(ci).copied())
-            .is_some_and(|ti| !keep_mask[ti]);
-
-        // Step 3: rebuild play_order, dropping entries whose target was
-        // removed, and remember where each old slot lands (or that it
-        // didn't) so we can fix up `current_index` afterwards.
-        let old_play_order = std::mem::take(&mut self.play_order);
-        let mut new_play_order: Vec<usize> = Vec::with_capacity(old_play_order.len());
-        let mut slot_remap: Vec<Option<usize>> = Vec::with_capacity(old_play_order.len());
-        for old_ti in old_play_order {
-            match remap[old_ti] {
-                Some(new_ti) => {
-                    slot_remap.push(Some(new_play_order.len()));
-                    new_play_order.push(new_ti);
-                }
-                None => slot_remap.push(None),
+        // Allocate the index map only when there is something to remove. Compact the
+        // canonical tracks in place so survivors keep their order without cloning any Arcs.
+        let mut remap = Vec::with_capacity(old_len);
+        remap.extend((0..first_removed).map(Some));
+        let mut old_index = 0;
+        let mut next_index = first_removed;
+        self.tracks.retain(|track| {
+            let index = old_index;
+            old_index += 1;
+            if index < first_removed {
+                return true;
             }
-        }
-        self.play_order = new_play_order;
-
-        // Step 4: rebuild original_order with the same remap rules. We don't
-        // need a slot map for it — it's never indexed by `current_index`.
-        let old_original_order = std::mem::take(&mut self.original_order);
-        let mut new_original_order: Vec<usize> = Vec::with_capacity(old_original_order.len());
-        for old_ti in old_original_order {
-            if let Some(new_ti) = remap[old_ti] {
-                new_original_order.push(new_ti);
-            }
-        }
-        self.original_order = new_original_order;
-
-        // Step 5: recompute current_index in the new play_order space.
-        // Strategy: find the next surviving slot at or after the old index;
-        // fall back to the last survivor; fall back to None when empty.
-        self.current_index = self.current_index.and_then(|old_ci| {
-            slot_remap
-                .iter()
-                .skip(old_ci)
-                .find_map(|s| *s)
-                .or_else(|| self.play_order.len().checked_sub(1))
+            let keep = index != first_removed && !should_remove(index, track);
+            remap.push(keep.then_some(next_index));
+            next_index += usize::from(keep);
+            keep
         });
 
-        self.tracks = new_tracks;
+        let current_was_removed = self
+            .current_index
+            .and_then(|i| self.play_order.get(i))
+            .is_some_and(|&i| remap[i].is_none());
+        let surviving_before_current = self.current_index.map(|index| {
+            self.play_order.iter().take(index).filter(|&&i| remap[i].is_some()).count()
+        });
+
+        for order in [&mut self.play_order, &mut self.original_order] {
+            order.retain_mut(|i| {
+                let Some(new_index) = remap[*i] else { return false };
+                *i = new_index;
+                true
+            });
+        }
+        self.current_index = surviving_before_current
+            .and_then(|index| self.play_order.len().checked_sub(1).map(|last| index.min(last)));
         self.version += 1;
 
-        PruneOutcome { removed, current_was_removed }
+        PruneOutcome { removed: old_len - self.tracks.len(), current_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {
