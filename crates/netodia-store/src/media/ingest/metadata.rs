@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-use jiff::{Timestamp, tz::Offset};
+use jiff::tz::Offset;
 use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::properties::FileProperties;
@@ -41,7 +41,7 @@ pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
 pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
     let mtime = meta.modified().ok()?;
     mtime.duration_since(UNIX_EPOCH).ok()?;
-    Timestamp::try_from(mtime).ok().map(|stamp| format_rfc3339(stamp, Offset::UTC))
+    jiff::Timestamp::try_from(mtime).ok().map(|stamp| format_rfc3339(stamp, Offset::UTC))
 }
 
 /// Extract the file's modification time as an RFC 3339 string.
