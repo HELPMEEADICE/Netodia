@@ -402,4 +402,8 @@ opt-level = "s"
 # The `"*"` glob excludes workspace members, so this never reaches `netodia-ui`,
 # which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
 [profile.dev.package."*"]
+debug = 0
 opt-level = 3
+
+[profile.dev]
+debug = "line-tables-only"
