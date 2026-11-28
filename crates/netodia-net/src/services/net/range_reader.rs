@@ -18,7 +18,8 @@ use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, ETAG, HeaderValue, RANGE};
 
 use self::track_buffer::{BufferTask, TrackBuffer};
 
-const CHUNK_BYTES: u64 = 64 * 1024;
+const CHUNK_SIZE: usize = 64 * 1024;
+const CHUNK_BYTES: u64 = CHUNK_SIZE as u64;
 // Stream a larger HTTP range in small chunks. Accurate MP3 seeks scan the frame headers from
 // the top; separate 64 KiB requests made a three-minute seek pay ~100 network round trips.
 // The response stays streamed, so this changes request count rather than the RAM cache's bound.

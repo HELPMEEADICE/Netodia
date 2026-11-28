@@ -6,7 +6,7 @@ use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, ETAG, HeaderValue, IF_RANG
 use tokio::task::JoinHandle;
 
 use super::{
-    CHUNK_BYTES, CachedMedia, MediaError, RECONNECT_DELAY, REQUEST_TIMEOUT, RangeChunk,
+    CHUNK_BYTES, CHUNK_SIZE, CachedMedia, MediaError, RECONNECT_DELAY, REQUEST_TIMEOUT, RangeChunk,
     RangeReader, StatusCode, Storage, content_range, request_error,
 };
 
@@ -197,7 +197,7 @@ impl Download {
         let mut media = media.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(buffer) = &mut media.track_buffer else { return };
         let mut start = start;
-        for bytes in bytes.chunks(CHUNK_BYTES as usize) {
+        for bytes in bytes.chunks(CHUNK_SIZE) {
             if buffer.chunk(start).is_none() {
                 buffer.cache(&RangeChunk { start, bytes: Arc::from(bytes) });
             }
