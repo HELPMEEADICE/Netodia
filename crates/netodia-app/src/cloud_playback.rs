@@ -830,8 +830,9 @@ impl CloudPlayback {
             let extension = decoder_extension(&active_ticket.ticket.format).to_owned();
             let reported_size = active_ticket.ticket.size;
             let reader = active_ticket.reader.as_ref().map(RangeReader::reopen);
+            let http = self.http.clone();
             let source_task = tokio::task::spawn_blocking(move || {
-                open_buffered_source(&url, &extension, reported_size, start, reader)
+                open_buffered_source(&url, &extension, reported_size, start, reader, Some(http))
             });
             let source_result = tokio::select! {
                 () = cancellation.cancelled() => {
@@ -1435,12 +1436,16 @@ fn open_buffered_source(
     reported_size: Option<u64>,
     start: Duration,
     reader: Option<RangeReader>,
+    http: Option<reqwest::Client>,
 ) -> AppResult<(BufferedAudioSource, RangeReader)> {
     let mut reader = match reader {
         Some(reader) => reader,
         None => RangeReader::open(url)
             .map_err(|error| AppError::network("在线播放源加载失败", error))?,
     };
+    if let Some(http) = http {
+        reader.buffer_track(http);
+    }
     let reusable = reader.reopen();
     let byte_len = reader.byte_len().or(reported_size);
     let extension = extension.to_owned();
@@ -1602,7 +1607,7 @@ mod tests {
         let server = serve_media(listener, bytes);
 
         let (mut source, reader) =
-            open_buffered_source(&url, "wav", Some(length), Duration::ZERO, None)?;
+            open_buffered_source(&url, "wav", Some(length), Duration::ZERO, None, None)?;
 
         assert_eq!(source.sample_rate().get(), 44_100);
         assert_eq!(source.channels().get(), 1);
@@ -1618,6 +1623,7 @@ mod tests {
             Some(length),
             Duration::from_millis(500),
             Some(reader),
+            None,
         )?;
         assert!(sought.next().is_some());
         assert!(source.next().is_some());

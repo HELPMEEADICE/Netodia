@@ -1,9 +1,10 @@
 //! Seekable HTTP media reads for the decoder worker.
 //!
-//! Requests use byte ranges and keep a bounded cache shared by reopened decoders. A host that
-//! ignores the initial range is copied incrementally to an anonymous temporary file, then served
-//! by seeking that file. This reader never receives account cookies; its URL is the short-lived
-//! CDN ticket.
+//! Reopened decoders share the bytes fetched by the playback reader and its parallel download.
+//! A host that ignores the initial range is copied incrementally to an anonymous temporary file,
+//! then served by seeking that file. Requests use the short-lived CDN ticket without account cookies.
+
+mod track_buffer;
 
 use std::collections::VecDeque;
 use std::fs::File;
@@ -13,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response};
-use reqwest::header::{CONTENT_RANGE, RANGE};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, ETAG, HeaderValue, RANGE};
+
+use self::track_buffer::{BufferTask, TrackBuffer};
 
 const CHUNK_BYTES: u64 = 64 * 1024;
 // Stream a larger HTTP range in small chunks. Accurate MP3 seeks scan the frame headers from
@@ -31,6 +34,7 @@ const RESPONSE_REUSE_TIME: Duration = Duration::from_secs(REQUEST_TIMEOUT.as_sec
 // Failed sockets must be discarded after a route change. Back off on the decoder worker while
 // the audio callback drains its PCM cache, then stays buffered at the same media position.
 const RECONNECT_DELAY: Duration = Duration::from_millis(250);
+const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(2);
 
 /// A sanitized failure from an HTTP media source. It deliberately omits the URL, which may contain
 /// a signed CDN token.
@@ -66,6 +70,13 @@ enum Storage {
 struct CachedMedia {
     storage: Storage,
     byte_len: Option<u64>,
+    track_buffer: Option<TrackBuffer>,
+}
+
+impl CachedMedia {
+    fn buffered_chunk(&self, position: u64) -> Option<&RangeChunk> {
+        self.track_buffer.as_ref()?.chunk(position)
+    }
 }
 
 struct RangeResponse {
@@ -91,10 +102,13 @@ impl RangeResponse {
 pub struct RangeReader {
     client: Client,
     url: reqwest::Url,
+    validator: Option<HeaderValue>,
     media: Arc<Mutex<CachedMedia>>,
     position: u64,
     response: Option<RangeResponse>,
     should_retry: Option<Box<dyn Fn() -> bool + Send + Sync>>,
+    // Only decoder cursors own the download. The passive ticket can retain already buffered bytes.
+    buffer_task: Option<Arc<BufferTask>>,
 }
 
 impl RangeReader {
@@ -102,15 +116,23 @@ impl RangeReader {
     pub fn open(url: &str) -> Result<Self, MediaError> {
         let url = super::http_url(url).ok_or(MediaError::InvalidUrl)?;
         let client = Client::builder()
-            .connect_timeout(Duration::from_secs(10))
+            .connect_timeout(super::CONNECT_TIMEOUT)
             .timeout(REQUEST_TIMEOUT)
             .user_agent(concat!("Netodia/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|_| MediaError::Transport)?;
         let response = send_range(&client, &url, 0, CHUNK_BYTES - 1)?;
+        let validator = response
+            .headers()
+            .get(ETAG)
+            .filter(|value| {
+                let bytes = value.as_bytes();
+                bytes.len() >= 2 && bytes.starts_with(b"\"") && bytes.ends_with(b"\"")
+            })
+            .cloned();
 
-        if response.status() == StatusCode::PARTIAL_CONTENT {
-            let (start, end, byte_len) = content_range(&response)?;
+        let (storage, byte_len) = if response.status() == StatusCode::PARTIAL_CONTENT {
+            let (start, end, byte_len) = content_range(response.headers().get(CONTENT_RANGE))?;
             if start != 0 || end >= CHUNK_BYTES {
                 return Err(MediaError::InvalidRange);
             }
@@ -118,33 +140,24 @@ impl RangeReader {
             if bytes.len() as u64 != end - start + 1 {
                 return Err(MediaError::InvalidRange);
             }
-            Ok(Self {
-                client,
-                url,
-                media: Arc::new(Mutex::new(CachedMedia {
-                    storage: Storage::Range { head: bytes, recent: VecDeque::new() },
-                    byte_len,
-                })),
-                position: 0,
-                response: None,
-                should_retry: None,
-            })
+            (Storage::Range { head: bytes, recent: VecDeque::new() }, byte_len)
         } else if response.status().is_success() {
             let (file, byte_len) = spool(response)?;
-            Ok(Self {
-                client,
-                url,
-                media: Arc::new(Mutex::new(CachedMedia {
-                    storage: Storage::Spool(file),
-                    byte_len: Some(byte_len),
-                })),
-                position: 0,
-                response: None,
-                should_retry: None,
-            })
+            (Storage::Spool(file), Some(byte_len))
         } else {
-            Err(MediaError::HttpStatus(response.status().as_u16()))
-        }
+            return Err(MediaError::HttpStatus(response.status().as_u16()));
+        };
+
+        Ok(Self {
+            client,
+            url,
+            validator,
+            media: Arc::new(Mutex::new(CachedMedia { storage, byte_len, track_buffer: None })),
+            position: 0,
+            response: None,
+            should_retry: None,
+            buffer_task: None,
+        })
     }
 
     #[must_use]
@@ -160,11 +173,20 @@ impl RangeReader {
         Self {
             client: self.client.clone(),
             url: self.url.clone(),
+            validator: self.validator.clone(),
             media: Arc::clone(&self.media),
             position: 0,
             response: None,
             should_retry: None,
+            buffer_task: None,
         }
+    }
+
+    /// Buffer the rest of a range-capable track while this decoder reads it. Call from the app's
+    /// Tokio runtime with its cookieless client before handing the reader to a worker thread.
+    pub fn buffer_track(&mut self, client: reqwest::Client) {
+        let task = track_buffer::start(self, client);
+        self.buffer_task = task;
     }
 
     /// Retries interrupted reads at the same byte offset while the decoder still wants them.
@@ -177,6 +199,7 @@ impl RangeReader {
     }
 
     fn fill_range_with_recovery(&mut self) -> Result<Option<RangeChunk>, MediaError> {
+        let mut delay = RECONNECT_DELAY;
         loop {
             match self.fill_range() {
                 Err(
@@ -188,7 +211,8 @@ impl RangeReader {
                     if !self.should_retry.as_ref().is_some_and(|retry| retry()) {
                         return Err(error);
                     }
-                    std::thread::sleep(RECONNECT_DELAY);
+                    std::thread::sleep(delay);
+                    delay = (delay * 2).min(MAX_RECONNECT_DELAY);
                     if !self.should_retry.as_ref().is_some_and(|retry| retry()) {
                         return Err(error);
                     }
@@ -203,9 +227,21 @@ impl RangeReader {
     }
 
     fn fill_range(&mut self) -> Result<Option<RangeChunk>, MediaError> {
+        let byte_len = {
+            let media = self.lock_media();
+            // A background request can finish between a cache miss and the next retry.
+            if let Some(chunk) = media.buffered_chunk(self.position) {
+                return Ok(Some(chunk.clone()));
+            }
+            media.byte_len
+        };
         let start = self.position / CHUNK_BYTES * CHUNK_BYTES;
         let mut end = start.saturating_add(REQUEST_BYTES - 1);
-        if let Some(byte_len) = self.byte_len() {
+        if self.buffer_task.as_ref().is_some_and(|task| task.is_running()) {
+            // Keep an urgent read to one segment while the other requests fill the cache.
+            end = track_buffer::segment_end(start);
+        }
+        if let Some(byte_len) = byte_len {
             if start >= byte_len {
                 return Ok(None);
             }
@@ -224,8 +260,15 @@ impl RangeReader {
         self.response = None;
         let opened_at = Instant::now();
         let response = send_range(&self.client, &self.url, start, end)?;
+        if self.validator.as_ref().is_some_and(|expected| {
+            response.headers().get(ETAG).is_some_and(|actual| actual != expected)
+        }) && response.status().is_success()
+        {
+            return Err(MediaError::InvalidRange);
+        }
         if response.status() == StatusCode::PARTIAL_CONTENT {
-            let (actual_start, actual_end, byte_len) = content_range(&response)?;
+            let (actual_start, actual_end, byte_len) =
+                content_range(response.headers().get(CONTENT_RANGE))?;
             if actual_start != start || actual_end > end {
                 return Err(MediaError::InvalidRange);
             }
@@ -247,6 +290,11 @@ impl RangeReader {
             let mut media = self.lock_media();
             media.byte_len = Some(byte_len);
             media.storage = Storage::Spool(file);
+            media.track_buffer = None;
+            drop(media);
+            if let Some(task) = self.buffer_task.take() {
+                task.abort();
+            }
             Ok(None)
         } else {
             Err(MediaError::HttpStatus(response.status().as_u16()))
@@ -257,6 +305,9 @@ impl RangeReader {
         let mut media = self.lock_media();
         if media.byte_len.is_none() {
             media.byte_len = byte_len;
+        }
+        if let Some(buffer) = &mut media.track_buffer {
+            buffer.cache(chunk);
         }
         if let Storage::Range { recent, .. } = &mut media.storage {
             // Concurrent decoders may finish the same range. Keep only one cached copy.
@@ -270,6 +321,9 @@ impl RangeReader {
 
     fn read_cached(&self, buffer: &mut [u8]) -> io::Result<Option<usize>> {
         let mut media = self.lock_media();
+        if let Some(chunk) = media.buffered_chunk(self.position) {
+            return copy_chunk(&chunk.bytes, self.position - chunk.start, buffer).map(Some);
+        }
         match &mut media.storage {
             Storage::Spool(file) => {
                 // File::try_clone shares its OS cursor. Seek and read under the same lock so an
@@ -352,17 +406,20 @@ fn send_range(
     start: u64,
     end: u64,
 ) -> Result<Response, MediaError> {
-    client.get(url.clone()).header(RANGE, format!("bytes={start}-{end}")).send().map_err(|error| {
-        if error.is_timeout() { MediaError::Timeout } else { MediaError::Transport }
-    })
+    client
+        .get(url.clone())
+        .header(ACCEPT_ENCODING, "identity")
+        .header(RANGE, format!("bytes={start}-{end}"))
+        .send()
+        .map_err(|error| request_error(&error))
 }
 
-fn content_range(response: &Response) -> Result<(u64, u64, Option<u64>), MediaError> {
-    let value = response
-        .headers()
-        .get(CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .ok_or(MediaError::InvalidRange)?;
+fn request_error(error: &reqwest::Error) -> MediaError {
+    if error.is_timeout() { MediaError::Timeout } else { MediaError::Transport }
+}
+
+fn content_range(header: Option<&HeaderValue>) -> Result<(u64, u64, Option<u64>), MediaError> {
+    let value = header.and_then(|value| value.to_str().ok()).ok_or(MediaError::InvalidRange)?;
     let value = value.strip_prefix("bytes ").ok_or(MediaError::InvalidRange)?;
     let (span, total) = value.split_once('/').ok_or(MediaError::InvalidRange)?;
     let (start, end) = span.split_once('-').ok_or(MediaError::InvalidRange)?;
@@ -428,6 +485,8 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::thread;
+
+    mod track_buffer_tests;
 
     fn request(stream: &mut TcpStream) -> io::Result<String> {
         stream.set_read_timeout(Some(Duration::from_secs(2)))?;

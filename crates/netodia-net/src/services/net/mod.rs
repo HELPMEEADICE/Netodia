@@ -11,7 +11,13 @@ pub mod lyrics_directory;
 pub mod pacer;
 pub mod range_reader;
 
+use std::time::Duration;
+
 use netodia_core::error::{AppError, describe};
+
+// Reqwest's TCP connector races the other address family after 300 ms when DNS returns both.
+// Give that Happy Eyeballs attempt time to connect before the overall connection deadline.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Build the process-wide shared `reqwest::Client`. Kept out of any constructor so the rustls
 /// stack and connection pool load only on the first real request; both `OnceLock` holders init
@@ -21,20 +27,22 @@ use netodia_core::error::{AppError, describe};
 /// but no single read should sit silent that long. The build is documented infallible for these
 /// options; the fallback is logged paranoia.
 pub fn build_http_client() -> reqwest::Client {
+    http_client_builder().build().unwrap_or_else(|e| {
+        log::warn!(
+            "reqwest::Client::builder().build() failed unexpectedly ({}); falling back to \
+             default client without timeouts — downloads may hang on a wedged socket",
+            describe(&e)
+        );
+        reqwest::Client::new()
+    })
+}
+
+fn http_client_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .read_timeout(std::time::Duration::from_mins(1))
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(Duration::from_mins(1))
         .pool_max_idle_per_host(4)
         .user_agent(concat!("Netodia/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .unwrap_or_else(|e| {
-            log::warn!(
-                "reqwest::Client::builder().build() failed unexpectedly ({}); falling back to \
-                 default client without timeouts — downloads may hang on a wedged socket",
-                describe(&e)
-            );
-            reqwest::Client::new()
-        })
 }
 
 /// `candidate` as an absolute `http`/`https` URL that names a host, or `None`.

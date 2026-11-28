@@ -28,7 +28,7 @@ async fn playing_cloud(
     let server = super::tests::serve_media(listener, bytes);
     let source_url = url.clone();
     let (source, reader) = tokio::task::spawn_blocking(move || {
-        open_buffered_source(&source_url, "flac", Some(size), Duration::ZERO, None)
+        open_buffered_source(&source_url, "flac", Some(size), Duration::ZERO, None, None)
     })
     .await??;
     server.join().map_err(|_| std::io::Error::other("media server panicked"))??;

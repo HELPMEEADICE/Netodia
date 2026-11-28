@@ -7,7 +7,8 @@ use netodia_core::error::AppError;
 use netodia_testkit::http::{TestResponse, TestServer};
 
 use super::{
-    build_http_client, get_capped, get_capped_text, http_url, is_http, is_http_url, read_capped,
+    build_http_client, get_capped, get_capped_text, http_client_builder, http_url, is_http,
+    is_http_url, read_capped,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -182,5 +183,25 @@ async fn the_shared_client_names_netodia_and_its_version() -> TestResult {
     let sent = server.requests();
     let agent = sent.first().and_then(|request| request.header("user-agent"));
     assert_eq!(agent, Some(concat!("Netodia/", env!("CARGO_PKG_VERSION"))));
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_shared_client_can_fall_back_to_ipv4() -> TestResult {
+    use std::net::{Ipv6Addr, SocketAddr};
+
+    let server = TestServer::start(|_| TestResponse::ok("IPv4"))?;
+    let ip_url = reqwest::Url::parse(&server.base_url())?;
+    let ipv4 = *ip_url.socket_addrs(|| None)?.first().ok_or("missing IPv4 address")?;
+    let ipv6 = SocketAddr::from((Ipv6Addr::LOCALHOST, ipv4.port()));
+    let response = http_client_builder()
+        .no_proxy()
+        .resolve_to_addrs("dual-stack.test", &[ipv6, ipv4])
+        .build()?
+        .get(format!("http://dual-stack.test:{}/", ipv4.port()))
+        .send()
+        .await?;
+
+    assert_eq!(response.remote_addr(), Some(ipv4));
     Ok(())
 }
