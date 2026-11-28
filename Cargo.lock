@@ -4041,7 +4041,7 @@ dependencies = [
 
 [[package]]
 name = "netodia"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "async-compat",
  "glob",
@@ -4070,7 +4070,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-app"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "blake3",
  "dirs",
@@ -4116,7 +4116,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-artwork"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "blake3",
  "color-thief",
@@ -4137,7 +4137,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-audio"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "crossbeam-queue",
  "lofty",
@@ -4153,7 +4153,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-core"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "dirs",
  "dunce",
@@ -4172,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-engine"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cpal",
  "log",
@@ -4191,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-integrations"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "log",
  "netodia-core",
@@ -4205,7 +4205,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-net"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -4231,7 +4231,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-platform"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "blake3",
  "dirs",
@@ -4257,7 +4257,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-playback"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "alsa",
  "biquad",
@@ -4280,7 +4280,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-store"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "blake3",
  "dunce",
@@ -4303,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-testkit"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "image",
  "tempfile",
@@ -4311,7 +4311,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-ui"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "slint",
  "slint-build",
@@ -4319,7 +4319,7 @@ dependencies = [
 
 [[package]]
 name = "netodia-views"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "async-compat",
  "futures-util",
